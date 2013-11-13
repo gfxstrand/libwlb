@@ -40,6 +40,7 @@ struct wlb_region {
 };
 
 struct wlb_surface {
+	struct wl_resource *resource;
 };
 
 void *zalloc(size_t size);
