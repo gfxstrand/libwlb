@@ -52,18 +52,25 @@ region_subtract(struct wl_client *client, struct wl_resource *resource,
 }
 
 static void
-region_destroy(struct wl_resource *resource)
+region_destroy(struct wl_client *client, struct wl_resource *resource)
+{
+	wl_resource_destroy(resource);
+}
+
+static const struct wl_region_interface region_interface = {
+	region_destroy,
+	region_add,
+	region_subtract
+};
+
+static void
+destroy_region(struct wl_resource *resource)
 {
 	struct wlb_region *region = wl_resource_get_user_data(resource);
 
 	pixman_region32_fini(&region->region);
 	free(region);
 }
-
-static const struct wl_region_interface region_interface = {
-	region_add,
-	region_subtract
-};
 
 static void
 compositor_create_region(struct wl_client *client,
@@ -78,16 +85,16 @@ compositor_create_region(struct wl_client *client,
 	}
 
 	region->resource =
-		wl_resource_create(client, &wl_compositor_interface, 1, id);
+		wl_resource_create(client, &wl_region_interface, 1, id);
 	if (!region->resource) {
 		wl_client_post_no_memory(client);
 		free(region);
 		return;
 	}
 	wl_resource_set_implementation(region->resource, &region_interface,
-				       region, region_destroy);
+				       region, destroy_region);
 
-	pixman_region32_inig(&region->region);
+	pixman_region32_init(&region->region);
 }
 
 static const struct wl_compositor_interface compositor_interface = {
