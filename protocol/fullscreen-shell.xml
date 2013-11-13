@@ -1,0 +1,61 @@
+<protocol name="fullscreen_shell">
+  <interface name="wl_fullscreen_shell" version="1">
+    <description summary="Displays a single surface per output">
+      Displays a single surface per output.
+
+      This interface can only be bound to by one client at a time.
+    </description>
+
+    <enum name="present_method">
+      <description summary="different method to set the surface fullscreen">
+	Hints to indicate to the compositor how to deal with a conflict
+	between the dimensions of the surface and the dimensions of the
+	output. The compositor is free to ignore this parameter.
+      </description>
+      <entry name="default" value="0" summary="no preference, apply default policy"/>
+      <entry name="scale" value="1" summary="scale, preserve the surface's aspect ratio and center on output"/>
+      <entry name="driver" value="2" summary="switch output mode to the smallest mode that can fit the surface, add black borders to compensate size mismatch"/>
+      <entry name="fill" value="3" summary="no upscaling, center on output and add black borders to compensate size mismatch"/>
+    </enum>
+
+    <request name="present_surface">
+      <description summary="present surface for display">
+	Present a surface on the given output.
+
+	This requests the fullscreen shell to display the given surface on
+	the given output.  Each client of the fullscreen shell can have at
+	most one surface per output at any one time.  Subsequent requests
+	with the same output replace the surface bound to that output.
+	Setting a null surface on an output effectively disables that
+	output for whatever definition of "disables" applies to the
+	implementaiton.  The same surface may be presented on multiple
+	outputs.
+
+	If the output is null, the compositor will present the surface on
+	whatever display (or displays) it thinks best.  In particular, this
+	may replace any or all surfaces currently presented so it should
+	not be used in combination with placing surfaces on specific
+	outputs.
+
+	The method specifies how the surface is to be persented.  In
+	particular, this instructs the compositor how to handle a size
+	mismatch between the presented surface and the output.
+
+	The framerate parameter is used only when the method is set
+	to "driver", to indicate the preferred framerate. A value of 0
+	indicates that the app does not care about framerate.  The
+	framerate is specified in mHz, that is framerate of 60000 is 60Hz.
+
+	A method of "scale" or "driver" implies a scaling operation of
+	the surface, either via a direct scaling operation or a change of
+	the output mode. This will override any kind of output scaling, so
+	that mapping a surface with a buffer size equal to the mode can
+	fill the screen independent of buffer_scale.
+      </description>
+      <arg name="surface" type="object" interface="wl_surface"/>
+      <arg name="method" type="uint"/>
+      <arg name="framerate" type="uint"/>
+      <arg name="output" type="object" interface="wl_output" allow-null="true"/>
+    </request>
+  </interface>
+</protocol>

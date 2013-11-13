@@ -1,7 +1,6 @@
 AC_PREREQ([2.64])
 AC_INIT([wlbackends], [0.0.1])
 
-
 # AC_CONFIG_SRCDIR([libwlb/libwlb.h])
 # AC_CONFIG_HEADERS([config.h])
 
@@ -26,6 +25,11 @@ PKG_PROG_PKG_CONFIG()
 
 PKG_CHECK_MODULES(WAYLAND, [wayland-server])
 PKG_CHECK_MODULES(PIXMAN, [pixman-1])
+
+AC_PATH_PROG([wayland_scanner], [wayland-scanner])
+if test x$wayland_scanner = x; then
+	AC_MSG_ERROR([wayland-scanner is needed to compile weston])
+fi
 
 # Checks for header files.
 
