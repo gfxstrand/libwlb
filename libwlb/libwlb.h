@@ -67,8 +67,7 @@ wlb_seat_create(struct wlb_compositor *compositor, uint32_t capabilities);
 
 void
 wlb_seat_keyboard_key(struct wlb_seat *seat, uint32_t time, uint32_t key,
-		      enum wl_keyboard_key_state state,
-		      enum weston_key_state_update update_state);
+		      enum wl_keyboard_key_state state);
 void
 wlb_seat_keyboard_modifiers(struct wlb_seat *seat, uint32_t serial);
 
