@@ -55,7 +55,7 @@ wlb_output_surface(struct wlb_output *output);
 uint32_t
 wlb_output_presentation_mode(struct wlb_output *output);
 
-struct wl_buffer *
+struct wl_resource *
 wlb_surface_buffer(struct wlb_surface *surface);
 enum wl_surface_buffer_transform
 wlb_surface_buffer_transform(struct wlb_surface *surface);
@@ -73,18 +73,18 @@ void
 wlb_seat_keyboard_modifiers(struct wlb_seat *seat, uint32_t serial);
 
 void
-wlb_seat_pointer_enter(struct wlb_seat, wl_fixed_t x, wl_fixed y);
+wlb_seat_pointer_enter(struct wlb_seat, wl_fixed_t x, wl_fixed_t y);
 void
-wlb_seat_pointer_motion_absolute(struct wlb_seat, wl_fixed_t x, wl_fixed y);
+wlb_seat_pointer_motion_absolute(struct wlb_seat, wl_fixed_t x, wl_fixed_t y);
 void
-wlb_seat_pointer_motion_relative(struct wlb_seat, wl_fixed_t dx, wl_fixed dy);
+wlb_seat_pointer_motion_relative(struct wlb_seat, wl_fixed_t dx, wl_fixed_t dy);
 void
 wlb_seat_pointer_leave(struct wlb_seat);
 
 void
-wlb_seat_touch_down(struct wlb_seat, uint32_t id, wl_fixed_t x, wl_fixed y);
+wlb_seat_touch_down(struct wlb_seat, uint32_t id, wl_fixed_t x, wl_fixed_t y);
 void
-wlb_seat_touch_motion(struct wlb_seat, uint32_t id, wl_fixed_t x, wl_fixed y);
+wlb_seat_touch_motion(struct wlb_seat, uint32_t id, wl_fixed_t x, wl_fixed_t y);
 void
 wlb_seat_touch_up(struct wlb_seat, uint32_t id);
 void
