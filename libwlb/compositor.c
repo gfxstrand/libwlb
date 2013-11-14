@@ -24,87 +24,14 @@
 #include <stdlib.h>
 
 static void
-surface_destroy(struct wl_client *client, struct wl_resource *resource)
-{
-	wl_resource_destroy(resource);
-}
-
-static void
-surface_attach(struct wl_client *client, struct wl_resource *resource,
-	       struct wl_resource *buffer, int32_t x, int32_t y)
-{
-}
-
-static void
-surface_damage(struct wl_client *client, struct wl_resource *resource,
-	       int32_t x, int32_t y, int32_t width, int32_t height)
-{
-}
-
-static void
-surface_frame(struct wl_client *client, struct wl_resource *resource,
-	      uint32_t callback)
-{
-}
-
-static void
-surface_set_opaque_region(struct wl_client *client,
-			  struct wl_resource *resource,
-			  struct wl_resource *region)
-{
-}
-
-static void
-surface_set_input_region(struct wl_client *client,
-			 struct wl_resource *resource,
-			 struct wl_resource *region)
-{
-}
-
-static void
-surface_commit(struct wl_client *client, struct wl_resource *resource)
-{
-}
-
-static const struct wl_surface_interface surface_interface = {
-	surface_destroy,
-	surface_attach,
-	surface_damage,
-	surface_frame,
-	surface_set_opaque_region,
-	surface_set_input_region,
-	surface_commit,
-};
-
-static void
-destroy_surface(struct wl_resource *resource)
-{
-	struct wlb_region *surface = wl_resource_get_user_data(resource);
-
-	free(surface);
-}
-
-static void
 compositor_create_surface(struct wl_client *client,
 			  struct wl_resource *resource, uint32_t id)
 {
 	struct wlb_surface *surface;
 
-	surface = zalloc(sizeof *surface);
-	if (!surface) {
+	surface = wlb_surface_create(client, id);
+	if (!surface)
 		wl_client_post_no_memory(client);
-		return;
-	}
-
-	surface->resource =
-		wl_resource_create(client, &wl_surface_interface, 1, id);
-	if (!surface->resource) {
-		wl_client_post_no_memory(client);
-		free(surface);
-		return;
-	}
-	wl_resource_set_implementation(surface->resource, &surface_interface,
-				       surface, destroy_surface);
 }
 
 static void

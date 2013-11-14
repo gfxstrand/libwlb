@@ -39,9 +39,37 @@ struct wlb_region {
 	pixman_region32_t region;
 };
 
+struct wlb_callback {
+	struct wl_resource *resource;
+	struct wl_list link;
+};
+
 struct wlb_surface {
 	struct wl_resource *resource;
+
+	struct {
+		struct wl_resource *buffer;
+		struct wl_listener buffer_destroy_listener;
+
+		pixman_region32_t damage;
+		pixman_region32_t input_region;
+
+		struct wl_list frame_callbacks;
+	} pending;
+
+	struct wl_resource *buffer;
+	struct wl_listener buffer_destroy_listener;
+
+	pixman_region32_t damage;
+	pixman_region32_t input_region;
+
+	struct wl_list frame_callbacks;
 };
+
+struct wlb_surface *
+wlb_surface_create(struct wl_client *client, uint32_t id);
+void
+wlb_surface_destroy(struct wlb_surface *surface);
 
 void *zalloc(size_t size);
 
