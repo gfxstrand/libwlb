@@ -30,36 +30,38 @@ struct wlb_output;
 struct wlb_surface;
 struct wlb_seat;
 
-struct wlb_compositor *
+WL_EXPORT struct wlb_compositor *
 wlb_compositor_create(struct wl_display *display);
 
-struct wlb_output *
+WL_EXPORT struct wlb_output *
 wlb_output_create(struct wlb_compositor *compositor, int32_t width,
 		  int32_t height, const char *make, const char *model);
-void
+WL_EXPORT void
+wlb_output_destroy(struct wlb_output *output);
+WL_EXPORT void
 wlb_output_set_transform(struct wlb_output *output,
 			 enum wl_output_transform transform);
-void
+WL_EXPORT void
 wlb_output_add_mode(struct wlb_output *output,
 		    int32_t width, int32_t height, int32_t refresh);
-void
+WL_EXPORT void
 wlb_output_set_mode(struct wlb_output *output,
 		    int32_t width, int32_t height, int32_t refresh);
-void
+WL_EXPORT void
 wlb_output_set_prefered_mode(struct wlb_output *output,
 			     int32_t width, int32_t height, int32_t refresh);
-int
+WL_EXPORT int
 wlb_output_needs_repaint(struct wlb_output *output);
-struct wlb_surface *
+WL_EXPORT struct wlb_surface *
 wlb_output_surface(struct wlb_output *output);
-uint32_t
+WL_EXPORT uint32_t
 wlb_output_presentation_mode(struct wlb_output *output);
 
-struct wl_resource *
+WL_EXPORT struct wl_resource *
 wlb_surface_buffer(struct wlb_surface *surface);
-enum wl_surface_buffer_transform
+WL_EXPORT enum wl_surface_buffer_transform
 wlb_surface_buffer_transform(struct wlb_surface *surface);
-enum wl_surface_buffer_transform
+WL_EXPORT enum wl_surface_buffer_transform
 wlb_surface_buffer_transform(struct wlb_surface *surface);
 
 struct wlb_seat *

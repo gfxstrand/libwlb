@@ -124,7 +124,7 @@ compositor_bind(struct wl_client *client,
 				       comp, NULL);
 }
 
-struct wlb_compositor *
+WL_EXPORT struct wlb_compositor *
 wlb_compositor_create(struct wl_display *display)
 {
 	struct wlb_compositor *comp;
