@@ -130,20 +130,25 @@ err_output:
 WL_EXPORT void
 wlb_output_destroy(struct wlb_output *output)
 {
-	struct wlb_output_mode *mode, *next;
+	struct wlb_output_mode *mode, *next_mode;
+	struct wl_resource *resource, *next_res;
 
 	wl_list_remove(&output->compositor_link);
 
 	free(output->physical.make);
 	free(output->physical.model);
 
-	wl_list_for_each_safe(mode, next, &output->mode_list, link) {
+	wl_list_for_each_safe(mode, next_mode, &output->mode_list, link) {
 		wl_list_remove(&mode->link);
 		free(mode);
 	}
 
 	if (output->surface)
 		wl_list_remove(&output->surface_link);
+
+	wl_global_destroy(output->global);
+	wl_resource_for_each_safe(resource, next_res, &output->resource_list)
+		wl_resource_destroy(resource);
 
 	free(output);
 }
