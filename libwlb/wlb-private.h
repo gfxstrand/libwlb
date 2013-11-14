@@ -39,6 +39,42 @@ struct wlb_region {
 	pixman_region32_t region;
 };
 
+struct wlb_output_mode {
+	struct wl_list link;
+
+	int32_t width;
+	int32_t height;
+	int32_t refresh;
+};
+
+struct wlb_output {
+	struct wlb_compositor *compositor;
+	struct wl_list compositor_link;
+
+	struct wl_global *global;
+	struct wl_list resource_list;
+
+	struct {
+		char *make;
+		char *model;
+		int32_t width;
+		int32_t height;
+
+		enum wl_output_subpixel subpixel;
+		enum wl_output_transform transform;
+	} physical;
+
+	struct wl_list mode_list;
+	struct wlb_output_mode *current_mode;
+	struct wlb_output_mode *preferred_mode;
+
+	int32_t x, y;
+
+	struct wlb_surface *surface;
+	struct wl_list surface_link;
+	uint32_t presentation_mode;
+};
+
 struct wlb_callback {
 	struct wl_resource *resource;
 	struct wl_list link;

@@ -7,6 +7,7 @@ libwlb_la_LIBADD = $(WAYLAND_LIBS)
 libwlb_la_SOURCES =			\
 	fullscreen-shell-protocol.c	\
 	surface.c			\
+	output.c			\
 	compositor.c
 
 AM_CPPFLAGS = $(WAYLAND_CFLAGS) $(PIXMAN_CFLAGS)

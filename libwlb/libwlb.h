@@ -42,14 +42,17 @@ WL_EXPORT void
 wlb_output_set_transform(struct wlb_output *output,
 			 enum wl_output_transform transform);
 WL_EXPORT void
+wlb_output_set_subpixel(struct wlb_output *output,
+			enum wl_output_subpixel subpixel);
+WL_EXPORT void
 wlb_output_add_mode(struct wlb_output *output,
 		    int32_t width, int32_t height, int32_t refresh);
 WL_EXPORT void
 wlb_output_set_mode(struct wlb_output *output,
 		    int32_t width, int32_t height, int32_t refresh);
 WL_EXPORT void
-wlb_output_set_prefered_mode(struct wlb_output *output,
-			     int32_t width, int32_t height, int32_t refresh);
+wlb_output_set_preferred_mode(struct wlb_output *output,
+			      int32_t width, int32_t height, int32_t refresh);
 WL_EXPORT int
 wlb_output_needs_repaint(struct wlb_output *output);
 WL_EXPORT struct wlb_surface *
