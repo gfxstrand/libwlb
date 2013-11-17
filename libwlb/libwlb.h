@@ -32,6 +32,8 @@ struct wlb_seat;
 
 WL_EXPORT struct wlb_compositor *
 wlb_compositor_create(struct wl_display *display);
+void
+wlb_compositor_destroy(struct wlb_compositor *compositor);
 
 WL_EXPORT struct wlb_output *
 wlb_output_create(struct wlb_compositor *compositor, int32_t width,
