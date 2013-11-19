@@ -60,7 +60,7 @@ wlb_output_needs_repaint(struct wlb_output *output);
 WL_EXPORT struct wlb_surface *
 wlb_output_surface(struct wlb_output *output);
 WL_EXPORT uint32_t
-wlb_output_presentation_mode(struct wlb_output *output);
+wlb_output_present_method(struct wlb_output *output);
 
 WL_EXPORT struct wl_resource *
 wlb_surface_buffer(struct wlb_surface *surface);

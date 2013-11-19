@@ -24,6 +24,7 @@
 #define LIBWLB_WLB_PRIVATE_H
 
 #include "libwlb.h"
+#include "fullscreen-shell-server-protocol.h"
 
 #include <pixman.h>
 
@@ -72,7 +73,7 @@ struct wlb_output {
 
 	struct wlb_surface *surface;
 	struct wl_list surface_link;
-	uint32_t presentation_mode;
+	enum wl_fullscreen_shell_present_method present_method;
 };
 
 struct wlb_callback {

@@ -256,8 +256,8 @@ wlb_output_surface(struct wlb_output *output)
 }
 
 WL_EXPORT uint32_t
-wlb_output_presentation_mode(struct wlb_output *output)
+wlb_output_present_method(struct wlb_output *output)
 {
-	return output->presentation_mode;
+	return output->present_method;
 }
 
