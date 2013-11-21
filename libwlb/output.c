@@ -323,3 +323,53 @@ wlb_output_recompute_surface_position(struct wlb_output *output)
 		break;
 	}
 }
+
+void
+wlb_output_get_matrix(struct wlb_output *output,
+		      pixman_transform_t *transform)
+{
+	pixman_fixed_t fw, fh;
+
+	pixman_transform_init_identity(transform);
+
+	assert(output->current_mode);
+
+	fw = pixman_int_to_fixed(output->current_mode->width);
+	fh = pixman_int_to_fixed(output->current_mode->height);
+
+	switch(output->physical.transform) {
+	default:
+	case WL_OUTPUT_TRANSFORM_NORMAL:
+	case WL_OUTPUT_TRANSFORM_FLIPPED:
+		break;
+	case WL_OUTPUT_TRANSFORM_90:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_90:
+		pixman_transform_rotate(transform, NULL, 0, -pixman_fixed_1);
+		pixman_transform_translate(transform, NULL, 0, fh);
+		break;
+	case WL_OUTPUT_TRANSFORM_180:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_180:
+		pixman_transform_rotate(transform, NULL, -pixman_fixed_1, 0);
+		pixman_transform_translate(transform, NULL, fw, fh);
+		break;
+	case WL_OUTPUT_TRANSFORM_270:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_270:
+		pixman_transform_rotate(transform, NULL, 0, pixman_fixed_1);
+		pixman_transform_translate(transform, NULL, fw, 0);
+		break;
+	}
+
+	switch (output->physical.transform) {
+	case WL_OUTPUT_TRANSFORM_FLIPPED:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_90:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_180:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_270:
+		pixman_transform_scale(transform, NULL,
+				       pixman_int_to_fixed (-1),
+				       pixman_int_to_fixed (1));
+		pixman_transform_translate(transform, NULL, fw, 0);
+		break;
+	default:
+		break;
+	}
+}

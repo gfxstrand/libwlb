@@ -87,6 +87,9 @@ wlb_output_present_surface(struct wlb_output *output,
 			   int32_t framerate);
 void
 wlb_output_recompute_surface_position(struct wlb_output *output);
+void
+wlb_output_get_matrix(struct wlb_output *output,
+		      pixman_transform_t *transform);
 
 struct wlb_callback {
 	struct wl_resource *resource;
