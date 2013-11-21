@@ -273,10 +273,11 @@ wlb_output_present_surface(struct wlb_output *output,
 
 	output->surface.surface = surface;
 	output->surface.present_method = method;
-	wl_list_insert(&surface->output_list, &output->surface.link);
 
-	if (surface)
+	if (surface) {
+		wl_list_insert(&surface->output_list, &output->surface.link);
 		wlb_output_recompute_surface_position(output);
+	}
 }
 
 void

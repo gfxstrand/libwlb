@@ -214,7 +214,11 @@ surface_resource_destroyed(struct wl_resource *resource)
 void
 wlb_surface_destroy(struct wlb_surface *surface)
 {
-	struct wlb_callback *callback, *next;
+	struct wlb_callback *callback, *cnext;
+	struct wlb_output *output, *onext;
+
+	wl_list_for_each_safe(output, onext, &surface->output_list, surface.link)
+		wlb_output_present_surface(output, NULL, 0, 0);
 
 	if (surface->pending.buffer)
 		wl_list_remove(&surface->pending.buffer_destroy_listener.link);
@@ -222,7 +226,7 @@ wlb_surface_destroy(struct wlb_surface *surface)
 	pixman_region32_fini(&surface->pending.damage);
 	pixman_region32_fini(&surface->pending.input_region);
 
-	wl_list_for_each_safe(callback, next,
+	wl_list_for_each_safe(callback, cnext,
 			      &surface->pending.frame_callbacks, link)
 		wlb_callback_destroy(callback);
 
@@ -232,7 +236,7 @@ wlb_surface_destroy(struct wlb_surface *surface)
 	pixman_region32_fini(&surface->damage);
 	pixman_region32_fini(&surface->input_region);
 
-	wl_list_for_each_safe(callback, next, &surface->frame_callbacks, link)
+	wl_list_for_each_safe(callback, cnext, &surface->frame_callbacks, link)
 		wlb_callback_destroy(callback);
 
 	free(surface);
