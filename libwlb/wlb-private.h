@@ -71,9 +71,11 @@ struct wlb_output {
 
 	int32_t x, y;
 
-	struct wlb_surface *surface;
-	struct wl_list surface_link;
-	enum wl_fullscreen_shell_present_method present_method;
+	struct {
+		struct wlb_surface *surface;
+		struct wl_list link;
+		enum wl_fullscreen_shell_present_method present_method;
+	} surface;
 };
 
 struct wlb_callback {

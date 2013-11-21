@@ -143,8 +143,8 @@ wlb_output_destroy(struct wlb_output *output)
 		free(mode);
 	}
 
-	if (output->surface)
-		wl_list_remove(&output->surface_link);
+	if (output->surface.surface)
+		wl_list_remove(&output->surface.link);
 
 	wl_global_destroy(output->global);
 	wl_resource_for_each_safe(resource, next_res, &output->resource_list)
@@ -252,12 +252,12 @@ wlb_output_needs_repaint(struct wlb_output *output)
 WL_EXPORT struct wlb_surface *
 wlb_output_surface(struct wlb_output *output)
 {
-	return output->surface;
+	return output->surface.surface;
 }
 
 WL_EXPORT uint32_t
 wlb_output_present_method(struct wlb_output *output)
 {
-	return output->present_method;
+	return output->surface.present_method;
 }
 
