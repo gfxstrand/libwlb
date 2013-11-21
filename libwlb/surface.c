@@ -113,11 +113,13 @@ static void
 surface_frame(struct wl_client *client, struct wl_resource *resource,
 	      uint32_t callback_id)
 {
+	struct wlb_surface *surface = wl_resource_get_user_data(resource);
 	struct wlb_callback *callback;
 
 	callback = wlb_callback_create(client, callback_id);
 	if (!callback)
 		wl_client_post_no_memory(client);
+	wl_list_insert(&surface->pending.frame_callbacks, &callback->link);
 }
 
 static void
@@ -246,7 +248,7 @@ wlb_surface_create(struct wl_client *client, uint32_t id)
 	pixman_region32_init_rect(&surface->input_region,
 				  INT32_MIN, INT32_MIN,
 				  UINT32_MAX, UINT32_MAX);
-	wl_list_init(&surface->pending.frame_callbacks);
+	wl_list_init(&surface->frame_callbacks);
 
 	wl_resource_set_implementation(surface->resource, &surface_interface,
 				       surface, surface_resource_destroyed);
