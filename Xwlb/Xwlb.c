@@ -338,6 +338,8 @@ x11_output_repaint(void *data)
 	xcb_rectangle_t rect;
 	xcb_void_cookie_t cookie;
 	xcb_generic_error_t *err;
+	uint32_t msec;
+	struct timeval tv;
 	
 	if (!wlb_output_needs_repaint(output->output))
 		return;
@@ -374,6 +376,10 @@ x11_output_repaint(void *data)
 	}
 
 	wl_event_source_timer_update(output->repaint_timer, 10);
+
+	gettimeofday(&tv, NULL);
+	msec = tv.tv_sec * 1000 + tv.tv_usec / 1000;
+	wlb_output_repaint_complete(output->output, msec);
 
 	return 1;
 }
