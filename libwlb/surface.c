@@ -237,13 +237,15 @@ wlb_surface_create(struct wl_client *client, uint32_t id)
 		surface_pending_buffer_destroyed;
 	pixman_region32_init(&surface->pending.damage);
 	pixman_region32_init_rect(&surface->pending.input_region,
-				  INT32_MAX, INT32_MAX, UINT32_MAX, UINT32_MAX);
+				  INT32_MIN, INT32_MIN,
+				  UINT32_MAX, UINT32_MAX);
 	wl_list_init(&surface->pending.frame_callbacks);
 
 	surface->buffer_destroy_listener.notify = surface_buffer_destroyed;
 	pixman_region32_init(&surface->damage);
 	pixman_region32_init_rect(&surface->input_region,
-				  INT32_MAX, INT32_MAX, UINT32_MAX, UINT32_MAX);
+				  INT32_MIN, INT32_MIN,
+				  UINT32_MAX, UINT32_MAX);
 	wl_list_init(&surface->pending.frame_callbacks);
 
 	wl_resource_set_implementation(surface->resource, &surface_interface,
