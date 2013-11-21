@@ -66,8 +66,6 @@ WL_EXPORT struct wl_resource *
 wlb_surface_buffer(struct wlb_surface *surface);
 WL_EXPORT enum wl_surface_buffer_transform
 wlb_surface_buffer_transform(struct wlb_surface *surface);
-WL_EXPORT enum wl_surface_buffer_transform
-wlb_surface_buffer_transform(struct wlb_surface *surface);
 
 struct wlb_seat *
 wlb_seat_create(struct wlb_compositor *compositor, uint32_t capabilities);
