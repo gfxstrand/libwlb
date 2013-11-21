@@ -75,8 +75,18 @@ struct wlb_output {
 		struct wlb_surface *surface;
 		struct wl_list link;
 		enum wl_fullscreen_shell_present_method present_method;
+
+		pixman_rectangle32_t position;
 	} surface;
 };
+
+void
+wlb_output_present_surface(struct wlb_output *output,
+			   struct wlb_surface *surface,
+			   enum wl_fullscreen_shell_present_method method,
+			   int32_t framerate);
+void
+wlb_output_recompute_surface_position(struct wlb_output *output);
 
 struct wlb_callback {
 	struct wl_resource *resource;
@@ -85,6 +95,8 @@ struct wlb_callback {
 
 struct wlb_surface {
 	struct wl_resource *resource;
+
+	struct wl_list output_list;
 
 	struct {
 		struct wl_resource *buffer;

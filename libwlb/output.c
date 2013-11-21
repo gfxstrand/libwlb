@@ -23,6 +23,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 static void
 output_resource_destroyed(struct wl_resource *resource)
@@ -261,3 +262,64 @@ wlb_output_present_method(struct wlb_output *output)
 	return output->surface.present_method;
 }
 
+void
+wlb_output_present_surface(struct wlb_output *output,
+			   struct wlb_surface *surface,
+			   enum wl_fullscreen_shell_present_method method,
+			   int32_t framerate)
+{
+	if (output->surface.surface)
+		wl_list_remove(&output->surface.link);
+
+	output->surface.surface = surface;
+	output->surface.present_method = method;
+	wl_list_insert(&surface->output_list, &output->surface.link);
+
+	if (surface)
+		wlb_output_recompute_surface_position(output);
+}
+
+void
+wlb_output_recompute_surface_position(struct wlb_output *output)
+{
+	int32_t ow, oh, sw, sh;
+
+	assert(output->current_mode);
+	assert(output->surface.surface);
+	assert(output->surface.surface->width >= 0);
+	assert(output->surface.surface->height >= 0);
+
+	sw = output->surface.surface->width;
+	sh = output->surface.surface->height;
+	ow = output->current_mode->width;
+	oh = output->current_mode->height;
+
+	switch(output->surface.present_method) {
+	case WL_FULLSCREEN_SHELL_PRESENT_METHOD_SCALE:
+		if (ow / sw <= oh / sh) {
+			output->surface.position.width = ow;
+			output->surface.position.height =
+				(sh * (int64_t)ow) / sw;
+			output->surface.position.x = 0;
+			output->surface.position.y =
+				(oh - output->surface.position.height) / 2;
+		} else {
+			output->surface.position.width =
+				(sw * (int64_t)oh) / sh;
+			output->surface.position.height = oh;
+			output->surface.position.x =
+				(ow - output->surface.position.width) / 2;
+			output->surface.position.y = 0;
+		}
+
+		break;
+	default:
+	case WL_FULLSCREEN_SHELL_PRESENT_METHOD_FILL:
+	case WL_FULLSCREEN_SHELL_PRESENT_METHOD_DRIVER:
+		output->surface.position.x = (ow - sw) / 2;
+		output->surface.position.y = (oh - sh) / 2;
+		output->surface.position.width = sw;
+		output->surface.position.height = sh;
+		break;
+	}
+}
