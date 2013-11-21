@@ -154,6 +154,7 @@ static void
 surface_commit(struct wl_client *client, struct wl_resource *resource)
 {
 	struct wlb_surface *surface = wl_resource_get_user_data(resource);
+	struct wl_shm_buffer *shm_buffer;
 
 	if (surface->buffer) {
 		if (surface->buffer != surface->pending.buffer)
@@ -162,6 +163,17 @@ surface_commit(struct wl_client *client, struct wl_resource *resource)
 	}
 
 	surface->buffer = surface->pending.buffer;
+
+	if (!surface->buffer) {
+		surface->width = 0;
+		surface->height = 0;
+	} else if (shm_buffer = wl_shm_buffer_get(surface->buffer)) {
+		surface->width = wl_shm_buffer_get_width(shm_buffer);
+		surface->height = wl_shm_buffer_get_height(shm_buffer);
+	} else {
+		surface->width = -1;
+		surface->height = -1;
+	}
 
 	if (surface->buffer)
 		wl_resource_add_destroy_listener(surface->buffer,

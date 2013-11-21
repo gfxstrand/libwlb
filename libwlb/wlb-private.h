@@ -96,6 +96,7 @@ struct wlb_surface {
 
 	struct wl_resource *buffer;
 	struct wl_listener buffer_destroy_listener;
+	int32_t width, height;
 
 	pixman_region32_t damage;
 	pixman_region32_t input_region;
