@@ -280,3 +280,29 @@ wlb_surface_create(struct wl_client *client, uint32_t id)
 
 	return surface;
 }
+
+void
+wlb_surface_compute_primary_output(struct wlb_surface *surface)
+{
+	struct wlb_output *output;
+	uint32_t area, max;
+
+	surface->primary_output = NULL;
+	max = 0;
+	wl_list_for_each(output, &surface->output_list, surface.link) {
+		area = output->surface.position.width * output->surface.position.height;
+		if (area > max) {
+			area = max;
+			surface->primary_output = output;
+		}
+	}
+}
+
+void
+wlb_surface_post_frame_callbacks(struct wlb_surface *surface, uint32_t time)
+{
+	struct wlb_callback *callback, *next;
+
+	wl_list_for_each_safe(callback, next, &surface->frame_callbacks, link)
+		wlb_callback_notify(callback, time);
+}

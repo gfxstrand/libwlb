@@ -250,6 +250,18 @@ wlb_output_needs_repaint(struct wlb_output *output)
 	return 1;
 }
 
+WL_EXPORT void
+wlb_output_repaint_complete(struct wlb_output *output, uint32_t time)
+{
+	if (!output->surface.surface)
+		return;
+
+	if (output->surface.surface->primary_output != output)
+		return;
+
+	wlb_surface_post_frame_callbacks(output->surface.surface, time);
+}
+
 WL_EXPORT struct wlb_surface *
 wlb_output_surface(struct wlb_output *output)
 {
@@ -268,15 +280,18 @@ wlb_output_present_surface(struct wlb_output *output,
 			   enum wl_fullscreen_shell_present_method method,
 			   int32_t framerate)
 {
-	if (output->surface.surface)
+	if (output->surface.surface) {
 		wl_list_remove(&output->surface.link);
+		wlb_surface_compute_primary_output(output->surface.surface);
+	}
 
 	output->surface.surface = surface;
 	output->surface.present_method = method;
 
 	if (surface) {
-		wl_list_insert(&surface->output_list, &output->surface.link);
 		wlb_output_recompute_surface_position(output);
+		wl_list_insert(&surface->output_list, &output->surface.link);
+		wlb_surface_compute_primary_output(output->surface.surface);
 	}
 }
 
@@ -323,6 +338,8 @@ wlb_output_recompute_surface_position(struct wlb_output *output)
 		output->surface.position.height = sh;
 		break;
 	}
+
+	wlb_surface_compute_primary_output(output->surface.surface);
 }
 
 void

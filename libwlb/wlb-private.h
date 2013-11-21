@@ -100,6 +100,7 @@ struct wlb_surface {
 	struct wl_resource *resource;
 
 	struct wl_list output_list;
+	struct wlb_output *primary_output;
 
 	struct {
 		struct wl_resource *buffer;
@@ -125,6 +126,10 @@ struct wlb_surface *
 wlb_surface_create(struct wl_client *client, uint32_t id);
 void
 wlb_surface_destroy(struct wlb_surface *surface);
+void
+wlb_surface_compute_primary_output(struct wlb_surface *surface);
+void
+wlb_surface_post_frame_callbacks(struct wlb_surface *surface, uint32_t time);
 
 void *zalloc(size_t size);
 
