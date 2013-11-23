@@ -23,6 +23,7 @@
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -30,6 +31,7 @@
 #include <errno.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
+#include <linux/input.h>
 
 #include <xcb/xcb.h>
 #include <xcb/shm.h>
@@ -40,6 +42,8 @@
 
 #include "../libwlb/libwlb.h"
 
+#define DEFAULT_AXIS_STEP_DISTANCE wl_fixed_from_int(10)
+
 struct x11_compositor {
 	struct wl_display *display;
 	struct wlb_compositor *compositor;
@@ -49,6 +53,10 @@ struct x11_compositor {
 	xcb_screen_t *screen;
 
 	struct wl_array keys;
+	struct wl_event_source *xcb_source;
+
+	struct wl_list output_list;
+	struct wlb_seat *seat;
 
 	struct {
 		xcb_atom_t wm_protocols;
@@ -70,6 +78,7 @@ struct x11_compositor {
 
 struct x11_output {
 	struct x11_compositor *compositor;
+	struct wl_list compositor_link;
 	struct wlb_output *output;
 	int32_t width, height;
 
@@ -156,11 +165,355 @@ x11_compositor_get_resources(struct x11_compositor *c)
 	xcb_free_pixmap(c->conn, pixmap);
 }
 
+uint32_t
+x11_compositor_get_time()
+{
+       struct timeval tv;
+       gettimeofday(&tv, NULL);
+       return tv.tv_sec * 1000 + tv.tv_usec / 1000;
+}
+
+static struct x11_output *
+x11_compositor_find_output(struct x11_compositor *c, xcb_window_t window)
+{
+	struct x11_output *output;
+
+	wl_list_for_each(output, &c->output_list, compositor_link) {
+		if (output->window == window)
+			return output;
+	}
+
+	assert(0);
+}
+
+static void
+x11_compositor_deliver_button_event(struct x11_compositor *c,
+				    xcb_generic_event_t *event, int state)
+{
+	xcb_button_press_event_t *button_event =
+		(xcb_button_press_event_t *) event;
+	uint32_t button;
+	struct x11_output *output;
+
+	output = x11_compositor_find_output(c, button_event->event);
+
+	if (state)
+		xcb_grab_pointer(c->conn, 0, output->window,
+				 XCB_EVENT_MASK_BUTTON_PRESS |
+				 XCB_EVENT_MASK_BUTTON_RELEASE |
+				 XCB_EVENT_MASK_POINTER_MOTION |
+				 XCB_EVENT_MASK_ENTER_WINDOW |
+				 XCB_EVENT_MASK_LEAVE_WINDOW,
+				 XCB_GRAB_MODE_ASYNC,
+				 XCB_GRAB_MODE_ASYNC,
+				 output->window, XCB_CURSOR_NONE,
+				 button_event->time);
+	else
+		xcb_ungrab_pointer(c->conn, button_event->time);
+
+	switch (button_event->detail) {
+	default:
+		button = button_event->detail + BTN_LEFT - 1;
+		break;
+	case 2:
+		button = BTN_MIDDLE;
+		break;
+	case 3:
+		button = BTN_RIGHT;
+		break;
+	case 4:
+		/* Axis are measured in pixels, but the xcb events are discrete
+		 * steps. Therefore move the axis by some pixels every step. */
+		if (state)
+			wlb_seat_pointer_axis(c->seat,
+					      x11_compositor_get_time(),
+					      WL_POINTER_AXIS_VERTICAL_SCROLL,
+					      -DEFAULT_AXIS_STEP_DISTANCE);
+		return;
+	case 5:
+		if (state)
+			wlb_seat_pointer_axis(c->seat,
+					      x11_compositor_get_time(),
+					      WL_POINTER_AXIS_VERTICAL_SCROLL,
+					      DEFAULT_AXIS_STEP_DISTANCE);
+		return;
+	case 6:
+		if (state)
+			wlb_seat_pointer_axis(c->seat,
+					      x11_compositor_get_time(),
+					      WL_POINTER_AXIS_HORIZONTAL_SCROLL,
+					      -DEFAULT_AXIS_STEP_DISTANCE);
+		return;
+	case 7:
+		if (state)
+			wlb_seat_pointer_axis(c->seat,
+					      x11_compositor_get_time(),
+					      WL_POINTER_AXIS_HORIZONTAL_SCROLL,
+					      DEFAULT_AXIS_STEP_DISTANCE);
+		return;
+	}
+
+	wlb_seat_pointer_button(c->seat, x11_compositor_get_time(), button,
+				state ? WL_POINTER_BUTTON_STATE_PRESSED :
+					WL_POINTER_BUTTON_STATE_RELEASED);
+}
+
+static void
+x11_compositor_deliver_motion_event(struct x11_compositor *c,
+					xcb_generic_event_t *event)
+{
+	struct x11_output *output;
+	wl_fixed_t x, y;
+	xcb_motion_notify_event_t *motion_notify =
+			(xcb_motion_notify_event_t *) event;
+
+	output = x11_compositor_find_output(c, motion_notify->event);
+
+	wlb_seat_pointer_motion_from_output(c->seat, x11_compositor_get_time(),
+					    output->output,
+					    wl_fixed_from_int(motion_notify->event_x),
+					    wl_fixed_from_int(motion_notify->event_y));
+}
+
+static int
+x11_compositor_next_event(struct x11_compositor *c,
+			  xcb_generic_event_t **event, uint32_t mask)
+{
+	if (mask & WL_EVENT_READABLE) {
+		*event = xcb_poll_for_event(c->conn);
+	} else {
+#ifdef HAVE_XCB_POLL_FOR_QUEUED_EVENT
+		*event = xcb_poll_for_queued_event(c->conn);
+#else
+		*event = xcb_poll_for_event(c->conn);
+#endif
+	}
+
+	return *event != NULL;
+}
+
+static int
+x11_compositor_handle_event(int fd, uint32_t mask, void *data)
+{
+	struct x11_compositor *c = data;
+	struct x11_output *output;
+	xcb_generic_event_t *event, *prev;
+	xcb_client_message_event_t *client_message;
+	xcb_enter_notify_event_t *enter_notify;
+	xcb_key_press_event_t *key_press, *key_release;
+	xcb_keymap_notify_event_t *keymap_notify;
+	xcb_focus_in_event_t *focus_in;
+	xcb_expose_event_t *expose;
+	xcb_atom_t atom;
+	uint32_t *k;
+	uint32_t i, set;
+	uint8_t response_type;
+	int count;
+
+	prev = NULL;
+	count = 0;
+	while (x11_compositor_next_event(c, &event, mask)) {
+		response_type = event->response_type & ~0x80;
+
+#if 0
+		switch (prev ? prev->response_type & ~0x80 : 0x80) {
+		case XCB_KEY_RELEASE:
+			/* Suppress key repeat events; this is only used if we
+			 * don't have XCB XKB support. */
+			key_release = (xcb_key_press_event_t *) prev;
+			key_press = (xcb_key_press_event_t *) event;
+			if (response_type == XCB_KEY_PRESS &&
+			    key_release->time == key_press->time &&
+			    key_release->detail == key_press->detail) {
+				/* Don't deliver the held key release
+				 * event or the new key press event. */
+				free(event);
+				free(prev);
+				prev = NULL;
+				continue;
+			} else {
+				/* Deliver the held key release now
+				 * and fall through and handle the new
+				 * event below. */
+				update_xkb_state_from_core(c, key_release->state);
+				notify_key(&c->core_seat,
+					   weston_compositor_get_time(),
+					   key_release->detail - 8,
+					   WL_KEYBOARD_KEY_STATE_RELEASED,
+					   STATE_UPDATE_AUTOMATIC);
+				free(prev);
+				prev = NULL;
+				break;
+			}
+
+		case XCB_FOCUS_IN:
+			assert(response_type == XCB_KEYMAP_NOTIFY);
+			keymap_notify = (xcb_keymap_notify_event_t *) event;
+			c->keys.size = 0;
+			for (i = 0; i < ARRAY_LENGTH(keymap_notify->keys) * 8; i++) {
+				set = keymap_notify->keys[i >> 3] &
+					(1 << (i & 7));
+				if (set) {
+					k = wl_array_add(&c->keys, sizeof *k);
+					*k = i;
+				}
+			}
+
+			/* Unfortunately the state only comes with the enter
+			 * event, rather than with the focus event.  I'm not
+			 * sure of the exact semantics around it and whether
+			 * we can ensure that we get both? */
+			notify_keyboard_focus_in(&c->core_seat, &c->keys,
+						 STATE_UPDATE_AUTOMATIC);
+
+			free(prev);
+			prev = NULL;
+			break;
+
+		default:
+			/* No previous event held */
+			break;
+		}
+
+#endif
+		switch (response_type) {
+#if 0
+		case XCB_KEY_PRESS:
+			key_press = (xcb_key_press_event_t *) event;
+			if (!c->has_xkb)
+				update_xkb_state_from_core(c, key_press->state);
+			notify_key(&c->core_seat,
+				   weston_compositor_get_time(),
+				   key_press->detail - 8,
+				   WL_KEYBOARD_KEY_STATE_PRESSED,
+				   c->has_xkb ? STATE_UPDATE_NONE :
+						STATE_UPDATE_AUTOMATIC);
+			break;
+		case XCB_KEY_RELEASE:
+			/* If we don't have XKB, we need to use the lame
+			 * autorepeat detection above. */
+			if (!c->has_xkb) {
+				prev = event;
+				break;
+			}
+			key_release = (xcb_key_press_event_t *) event;
+			notify_key(&c->core_seat,
+				   weston_compositor_get_time(),
+				   key_release->detail - 8,
+				   WL_KEYBOARD_KEY_STATE_RELEASED,
+				   STATE_UPDATE_NONE);
+			break;
+#endif
+		case XCB_BUTTON_PRESS:
+			x11_compositor_deliver_button_event(c, event, 1);
+			break;
+		case XCB_BUTTON_RELEASE:
+			x11_compositor_deliver_button_event(c, event, 0);
+			break;
+		case XCB_MOTION_NOTIFY:
+			x11_compositor_deliver_motion_event(c, event);
+			break;
+
+#if 0
+		case XCB_EXPOSE:
+			expose = (xcb_expose_event_t *) event;
+			output = x11_compositor_find_output(c, expose->window);
+			weston_output_schedule_repaint(&output->base);
+			break;
+
+		case XCB_ENTER_NOTIFY:
+			x11_compositor_deliver_enter_event(c, event);
+			break;
+
+		case XCB_LEAVE_NOTIFY:
+			enter_notify = (xcb_enter_notify_event_t *) event;
+			if (enter_notify->state >= Button1Mask)
+				break;
+			if (!c->has_xkb)
+				update_xkb_state_from_core(c, enter_notify->state);
+			notify_pointer_focus(&c->core_seat, NULL, 0, 0);
+			break;
+#endif
+
+		case XCB_CLIENT_MESSAGE:
+			client_message = (xcb_client_message_event_t *) event;
+			atom = client_message->data.data32[0];
+			if (atom == c->atom.wm_delete_window)
+				wl_display_terminate(c->display);
+			break;
+
+#if 0
+		case XCB_FOCUS_IN:
+			focus_in = (xcb_focus_in_event_t *) event;
+			if (focus_in->mode == XCB_NOTIFY_MODE_WHILE_GRABBED)
+				break;
+
+			prev = event;
+			break;
+
+		case XCB_FOCUS_OUT:
+			focus_in = (xcb_focus_in_event_t *) event;
+			if (focus_in->mode == XCB_NOTIFY_MODE_WHILE_GRABBED ||
+			    focus_in->mode == XCB_NOTIFY_MODE_UNGRAB)
+				break;
+			notify_keyboard_focus_out(&c->core_seat);
+			break;
+
+		default:
+			break;
+#endif
+		}
+
+#ifdef HAVE_XCB_XKB
+		if (c->has_xkb) {
+			if (response_type == c->xkb_event_base) {
+				xcb_xkb_state_notify_event_t *state =
+					(xcb_xkb_state_notify_event_t *) event;
+				if (state->xkbType == XCB_XKB_STATE_NOTIFY)
+					update_xkb_state(c, state);
+			} else if (response_type == XCB_PROPERTY_NOTIFY) {
+				xcb_property_notify_event_t *prop_notify =
+					(xcb_property_notify_event_t *) event;
+				if (prop_notify->window == c->screen->root &&
+				    prop_notify->atom == c->atom.xkb_names &&
+				    prop_notify->state == XCB_PROPERTY_NEW_VALUE)
+					update_xkb_keymap(c);
+			}
+		}
+#endif
+
+		count++;
+		if (prev != event)
+			free (event);
+	}
+
+#if 0
+	switch (prev ? prev->response_type & ~0x80 : 0x80) {
+	case XCB_KEY_RELEASE:
+		key_release = (xcb_key_press_event_t *) prev;
+		update_xkb_state_from_core(c, key_release->state);
+		notify_key(&c->core_seat,
+			   weston_compositor_get_time(),
+			   key_release->detail - 8,
+			   WL_KEYBOARD_KEY_STATE_RELEASED,
+			   STATE_UPDATE_AUTOMATIC);
+		free(prev);
+		prev = NULL;
+		break;
+	default:
+		break;
+	}
+#endif
+
+	return count;
+}
+
 struct x11_compositor *
 x11_compositor_create(struct wl_display *display)
 {
 	struct x11_compositor *c;
 	xcb_screen_iterator_t siter;
+	struct wl_event_loop *loop;
 
 	c = calloc(1, sizeof *c);
 	if (!c)
@@ -187,7 +540,17 @@ x11_compositor_create(struct wl_display *display)
 
 	x11_compositor_get_resources(c);
 	//x11_compositor_get_wm_info(c);
-	
+
+	c->seat = wlb_seat_create(c->compositor, WL_SEAT_CAPABILITY_POINTER);
+	wl_list_init(&c->output_list);
+
+	loop = wl_display_get_event_loop(c->display);
+	c->xcb_source =
+		wl_event_loop_add_fd(loop, xcb_get_file_descriptor(c->conn),
+				     WL_EVENT_READABLE,
+				     x11_compositor_handle_event, c);
+	wl_event_source_check(c->xcb_source);
+
 	return c;
 
 err_xdisplay:
@@ -377,9 +740,7 @@ x11_output_repaint(void *data)
 
 	wl_event_source_timer_update(output->repaint_timer, 10);
 
-	gettimeofday(&tv, NULL);
-	msec = tv.tv_sec * 1000 + tv.tv_usec / 1000;
-	wlb_output_repaint_complete(output->output, msec);
+	wlb_output_repaint_complete(output->output, x11_compositor_get_time());
 
 	return 1;
 }
@@ -398,6 +759,14 @@ x11_output_create(struct x11_compositor *c, int32_t width, int32_t height)
 		XCB_EVENT_MASK_STRUCTURE_NOTIFY,
 		0
 	};
+
+	values[0] |=
+		XCB_EVENT_MASK_BUTTON_PRESS |
+		XCB_EVENT_MASK_BUTTON_RELEASE |
+		XCB_EVENT_MASK_POINTER_MOTION |
+		XCB_EVENT_MASK_ENTER_WINDOW |
+		XCB_EVENT_MASK_LEAVE_WINDOW |
+		XCB_EVENT_MASK_FOCUS_CHANGE;
 
 	output = calloc(1, sizeof *output);
 	if (!output)
@@ -450,6 +819,8 @@ x11_output_create(struct x11_compositor *c, int32_t width, int32_t height)
 	output->repaint_timer =
 		wl_event_loop_add_timer(loop, x11_output_repaint, output);
 	wl_event_source_timer_update(output->repaint_timer, 10);
+
+	wl_list_insert(&c->output_list, &output->compositor_link);
 	
 	return output;
 
