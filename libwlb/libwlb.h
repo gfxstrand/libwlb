@@ -72,9 +72,9 @@ wlb_surface_buffer(struct wlb_surface *surface);
 WL_EXPORT enum wl_surface_buffer_transform
 wlb_surface_buffer_transform(struct wlb_surface *surface);
 
-struct wlb_seat *
+WL_EXPORT struct wlb_seat *
 wlb_seat_create(struct wlb_compositor *compositor, uint32_t capabilities);
-void
+WL_EXPORT void
 wlb_seat_destroy(struct wlb_seat *seat);
 
 void
@@ -83,20 +83,28 @@ wlb_seat_keyboard_key(struct wlb_seat *seat, uint32_t time, uint32_t key,
 void
 wlb_seat_keyboard_modifiers(struct wlb_seat *seat, uint32_t serial);
 
-void
-wlb_seat_pointer_enter(struct wlb_seat *seat, wl_fixed_t x, wl_fixed_t y);
-void
-wlb_seat_pointer_motion_relative(struct wlb_seat *seat,
+WL_EXPORT void
+wlb_seat_pointer_motion_relative(struct wlb_seat *seat, uint32_t time,
 				 wl_fixed_t dx, wl_fixed_t dy);
-void
-wlb_seat_pointer_motion_absolute(struct wlb_seat *seat,
+WL_EXPORT void
+wlb_seat_pointer_motion_absolute(struct wlb_seat *seat, uint32_t time,
 				 wl_fixed_t x, wl_fixed_t y);
-void
-wlb_seat_pointer_motion_from_output(struct wlb_seat *seat,
+WL_EXPORT void
+wlb_seat_pointer_button(struct wlb_seat *seat, uint32_t time, uint32_t button,
+			enum wl_pointer_button_state state);
+WL_EXPORT void
+wlb_seat_pointer_enter_output(struct wlb_seat *seat,
+			      struct wlb_output *output,
+			      wl_fixed_t x, wl_fixed_t y);
+WL_EXPORT void
+wlb_seat_pointer_motion_from_output(struct wlb_seat *seat, uint32_t time,
 				    struct wlb_output *output,
 				    wl_fixed_t x, wl_fixed_t y);
-void
-wlb_seat_pointer_leave(struct wlb_seat *seat);
+WL_EXPORT void
+wlb_seat_pointer_leave_output(struct wlb_seat *seat);
+WL_EXPORT void
+wlb_seat_pointer_axis(struct wlb_seat *seat, uint32_t time,
+		      enum wl_pointer_axis axis, wl_fixed_t value);
 
 void
 wlb_seat_touch_down(struct wlb_seat, uint32_t id, wl_fixed_t x, wl_fixed_t y);
