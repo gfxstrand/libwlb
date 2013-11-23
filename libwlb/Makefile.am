@@ -8,6 +8,7 @@ libwlb_la_SOURCES =			\
 	fullscreen-shell-protocol.c	\
 	surface.c			\
 	output.c			\
+	seat.c				\
 	pixman-renderer.c		\
 	compositor.c
 

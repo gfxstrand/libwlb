@@ -202,9 +202,13 @@ WL_EXPORT void
 wlb_compositor_destroy(struct wlb_compositor *comp)
 {
 	struct wlb_output *output, *onext;
+	struct wlb_seat *seat, *snext;
 
 	wl_list_for_each_safe(output, onext, &comp->output_list, compositor_link)
 		wlb_output_destroy(output);
+
+	wl_list_for_each_safe(seat, snext, &comp->seat_list, compositor_link)
+		wlb_seat_destroy(seat);
 	
 	wl_display_destroy(comp->display);
 

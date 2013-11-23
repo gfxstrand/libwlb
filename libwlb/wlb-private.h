@@ -131,6 +131,17 @@ wlb_surface_compute_primary_output(struct wlb_surface *surface);
 void
 wlb_surface_post_frame_callbacks(struct wlb_surface *surface, uint32_t time);
 
+struct wlb_seat {
+	struct wlb_compositor *compositor;
+	struct wl_list compositor_link;
+
+	uint32_t capabilities;
+
+	struct {
+		wl_fixed_t x, y;
+	} pointer;
+};
+
 void *zalloc(size_t size);
 
 #endif /* !defined LIBWLB_WLB_PRIVATE_H */
