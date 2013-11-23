@@ -147,7 +147,7 @@ wlb_output_pixman_composite(struct wlb_output *output, pixman_image_t *image)
 				 &output->surface.position);
 
 		pixman_region32_subtract(&damage, &damage, &surface_damage);
-		pixman_region32_fini(&damage);
+		pixman_region32_fini(&surface_damage);
 	}
 
 	fill_with_black(image, &damage);
