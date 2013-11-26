@@ -95,6 +95,11 @@ void
 wlb_output_to_surface_coords(struct wlb_output *output,
 			     wl_fixed_t x, wl_fixed_t y,
 			     wl_fixed_t *sx, wl_fixed_t *sy);
+struct wlb_output *
+wlb_output_find(struct wlb_compositor *compositor, wl_fixed_t x, wl_fixed_t y);
+struct wlb_output *
+wlb_output_find_with_surface(struct wlb_compositor *compositor,
+			     wl_fixed_t x, wl_fixed_t y);
 
 struct wlb_callback {
 	struct wl_resource *resource;

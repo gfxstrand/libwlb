@@ -414,3 +414,63 @@ wlb_output_to_surface_coords(struct wlb_output *output,
 		*sy = (y * (int64_t)output->surface.position.height) /
 		      output->current_mode->height;
 }
+
+struct wlb_output *
+wlb_output_find(struct wlb_compositor *c, wl_fixed_t x, wl_fixed_t y)
+{
+	struct wlb_output *output;
+	int32_t ix, iy;
+
+	ix = wl_fixed_to_int(x);
+	iy = wl_fixed_to_int(y);
+
+	wl_list_for_each(output, &c->output_list, compositor_link) {
+		if (!output->current_mode)
+			continue;
+
+		if (ix >= output->x && iy >= output->y &&
+		    ix < output->x + output->current_mode->width &&
+		    iy < output->y + output->current_mode->height)
+			continue;
+	}
+
+	return NULL;
+}
+
+struct wlb_output *
+wlb_output_find_with_surface(struct wlb_compositor *c,
+			     wl_fixed_t x, wl_fixed_t y)
+{
+	struct wlb_output *output;
+	int32_t ix, iy;
+	wl_fixed_t sx, sy;
+
+	ix = wl_fixed_to_int(x);
+	iy = wl_fixed_to_int(y);
+
+	wl_list_for_each(output, &c->output_list, compositor_link) {
+		if (!output->surface.surface || !output->current_mode)
+			continue;
+
+		if (ix < output->x || iy < output->y ||
+		    ix >= output->x + output->current_mode->width ||
+		    iy >= output->y + output->current_mode->height)
+			continue;
+
+		if (ix < output->surface.position.x ||
+		    iy < output->surface.position.y ||
+		    ix >= output->surface.position.x + (int32_t)output->surface.position.width ||
+		    iy >= output->surface.position.y + (int32_t)output->surface.position.height)
+			continue;
+
+		wlb_output_to_surface_coords(output, x, y, &sx, &sy);
+
+		if (pixman_region32_contains_point(&output->surface.surface->input_region,
+						   wl_fixed_from_int(sx),
+						   wl_fixed_from_int(sy),
+						   NULL))
+			return output;
+	}
+
+	return NULL;
+}
