@@ -269,10 +269,10 @@ x11_compositor_deliver_motion_event(struct x11_compositor *c,
 
 	output = x11_compositor_find_output(c, motion_notify->event);
 
-	wlb_seat_pointer_motion_from_output(c->seat, x11_compositor_get_time(),
-					    output->output,
-					    wl_fixed_from_int(motion_notify->event_x),
-					    wl_fixed_from_int(motion_notify->event_y));
+	wlb_seat_pointer_move_on_output(c->seat, x11_compositor_get_time(),
+					output->output,
+					wl_fixed_from_int(motion_notify->event_x),
+					wl_fixed_from_int(motion_notify->event_y));
 }
 
 static int
