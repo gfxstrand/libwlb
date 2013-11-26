@@ -20,7 +20,7 @@ and back-ends to talk.  This would allow someone to write a stand-alone RDP
 or VNC server, for instance, and then use it with any any compositor that
 supports running nested inside another compositor with wl_fullscreen_shell.
 
-### Why not just develop a standard plug-in architecture and keep things in-process?
+### Why not just develop a standard plug-in architecture?
 
 Mozilla did that for web browser plugins.  However, plug-ins are
 notoriously unstable.  In order to solve this problem, every web browser
@@ -29,12 +29,13 @@ avoiding that whole mess by running out-of-process from the start.  Also,
 the Wayland protocol already provides us with all the pieces we need for
 this.
 
-### What about performance?  Isn't out-of-process slower?
+### What about performance?
 
-Yes, it is, in theory.  However, I don't intend this to be used in
-extremely high-performance situations.  In the case of something like a VNC
-or RDP server, the performance loss from the context switch pales in
-comparison to the cost of network communication.
+In theory, running out-of-process is slower because you have to communicate
+over sockets and context switch between processes.  However, I don't intend
+this to be used in extremely high-performance situations.  In the case of
+something like a VNC or RDP server, the performance loss from the context
+switch pales in comparison to the cost of network communication.
 
 ## What libwlb is designed to do
 
