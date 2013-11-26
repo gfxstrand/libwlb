@@ -395,3 +395,22 @@ wlb_output_get_matrix(struct wlb_output *output,
 		break;
 	}
 }
+
+void
+wlb_output_to_surface_coords(struct wlb_output *output,
+			     wl_fixed_t x, wl_fixed_t y,
+			     wl_fixed_t *sx, wl_fixed_t *sy)
+{
+	if (!output->current_mode)
+		return;
+
+	x -= wl_fixed_from_int(output->surface.position.x);
+	y -= wl_fixed_from_int(output->surface.position.y);
+
+	if (sx)
+		*sx = (x * (int64_t)output->surface.position.width) /
+		      output->current_mode->width;
+	if (sy)
+		*sy = (y * (int64_t)output->surface.position.height) /
+		      output->current_mode->height;
+}

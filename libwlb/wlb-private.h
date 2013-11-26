@@ -91,6 +91,10 @@ wlb_output_recompute_surface_position(struct wlb_output *output);
 void
 wlb_output_get_matrix(struct wlb_output *output,
 		      pixman_transform_t *transform);
+void
+wlb_output_to_surface_coords(struct wlb_output *output,
+			     wl_fixed_t x, wl_fixed_t y,
+			     wl_fixed_t *sx, wl_fixed_t *sy);
 
 struct wlb_callback {
 	struct wl_resource *resource;
