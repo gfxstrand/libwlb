@@ -51,6 +51,7 @@ struct wlb_output_mode {
 struct wlb_output {
 	struct wlb_compositor *compositor;
 	struct wl_list compositor_link;
+	struct wl_signal destroy_signal;
 
 	struct wl_global *global;
 	struct wl_list resource_list;

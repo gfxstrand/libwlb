@@ -106,6 +106,8 @@ wlb_output_create(struct wlb_compositor *compositor, int32_t width,
 	output->physical.transform = WL_OUTPUT_TRANSFORM_NORMAL;
 	output->physical.subpixel = WL_OUTPUT_SUBPIXEL_UNKNOWN;
 
+	wl_signal_init(&output->destroy_signal);
+
 	wl_list_init(&output->resource_list);
 	output->global = wl_global_create(compositor->display,
 					  &wl_output_interface, 1,
@@ -133,6 +135,8 @@ wlb_output_destroy(struct wlb_output *output)
 {
 	struct wlb_output_mode *mode, *next_mode;
 	struct wl_resource *resource, *next_res;
+
+	wl_signal_emit(&output->destroy_signal, output);
 
 	wl_list_remove(&output->compositor_link);
 
