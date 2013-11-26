@@ -97,9 +97,9 @@ wlb_seat_pointer_enter_output(struct wlb_seat *seat,
 			      struct wlb_output *output,
 			      wl_fixed_t x, wl_fixed_t y);
 WL_EXPORT void
-wlb_seat_pointer_motion_from_output(struct wlb_seat *seat, uint32_t time,
-				    struct wlb_output *output,
-				    wl_fixed_t x, wl_fixed_t y);
+wlb_seat_pointer_move_on_output(struct wlb_seat *seat, uint32_t time,
+				struct wlb_output *output,
+				wl_fixed_t x, wl_fixed_t y);
 WL_EXPORT void
 wlb_seat_pointer_leave_output(struct wlb_seat *seat);
 WL_EXPORT void

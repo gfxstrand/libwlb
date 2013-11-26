@@ -9,6 +9,7 @@ libwlb_la_SOURCES =			\
 	surface.c			\
 	output.c			\
 	input.c				\
+	pointer.c				\
 	pixman-renderer.c		\
 	compositor.c
 

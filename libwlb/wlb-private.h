@@ -141,15 +141,50 @@ wlb_surface_compute_primary_output(struct wlb_surface *surface);
 void
 wlb_surface_post_frame_callbacks(struct wlb_surface *surface, uint32_t time);
 
+struct wlb_pointer {
+	struct wlb_seat *seat;
+
+	wl_fixed_t x, y;
+
+	struct wl_list resource_list;
+
+	int32_t button_count;
+
+	struct wlb_output *focus;
+	struct wlb_surface *focus_surface;
+	struct wl_listener surface_destroy_listener;
+	struct wl_listener output_destroy_listener;
+};
+
+struct wlb_pointer *
+wlb_pointer_create(struct wlb_seat *seat);
+void
+wlb_pointer_create_resource(struct wlb_pointer *pointer,
+			    struct wl_client *client, uint32_t id);
+void
+wlb_pointer_destroy(struct wlb_pointer *pointer);
+void
+wlb_pointer_set_focus(struct wlb_pointer *pointer, struct wlb_output *output);
+void
+wlb_pointer_update_focus(struct wlb_pointer *pointer);
+void
+wlb_pointer_send_motion(struct wlb_pointer *pointer, uint32_t time,
+			wl_fixed_t x, wl_fixed_t y);
+void
+wlb_pointer_send_button(struct wlb_pointer *pointer, uint32_t time,
+			uint32_t button, enum wl_pointer_button_state state);
+void
+wlb_pointer_send_axis(struct wlb_pointer *pointer, uint32_t time,
+		      enum wl_pointer_axis axis, wl_fixed_t value);
+
 struct wlb_seat {
 	struct wlb_compositor *compositor;
 	struct wl_list compositor_link;
+	struct wl_global *global;
 
 	uint32_t capabilities;
 
-	struct {
-		wl_fixed_t x, y;
-	} pointer;
+	struct wlb_pointer *pointer;
 };
 
 void *zalloc(size_t size);
