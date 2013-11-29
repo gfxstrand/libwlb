@@ -24,13 +24,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-/* Common destructor used by all seat resources */
-static void
-unlink_resource(struct wl_resource *resource)
-{
-	wl_list_remove(wl_resource_get_link(resource));
-}
-
 static void
 seat_get_pointer(struct wl_client *client, struct wl_resource *resource,
 		 uint32_t id)
@@ -47,6 +40,12 @@ static void
 seat_get_keyboard(struct wl_client *client, struct wl_resource *resource,
 		  uint32_t id)
 {
+	struct wlb_seat *seat = wl_resource_get_user_data(resource);
+
+	if (!seat->keyboard)
+		return;
+	
+	wlb_keyboard_create_resource(seat->keyboard, client, id);
 }
 
 static void
@@ -102,11 +101,21 @@ wlb_seat_create(struct wlb_compositor *compositor, uint32_t capabilities)
 			goto err_global;
 	}
 
+	if (capabilities & WL_SEAT_CAPABILITY_KEYBOARD) {
+		seat->keyboard = wlb_keyboard_create(seat);
+		if (!seat->keyboard)
+			goto err_global;
+	}
+
 	wl_list_insert(&compositor->seat_list, &seat->compositor_link);
 
 	return seat;
 
 err_global:
+	if (seat->keyboard)
+		wlb_keyboard_destroy(seat->keyboard);
+	if (seat->pointer)
+		wlb_pointer_destroy(seat->pointer);
 	wl_global_destroy(seat->global);
 err_alloc:
 	free(seat);
@@ -123,6 +132,48 @@ wlb_seat_destroy(struct wlb_seat *seat)
 		wlb_pointer_destroy(seat->pointer);
 
 	free(seat);
+}
+
+WL_EXPORT int
+wlb_seat_keyboard_set_keymap(struct wlb_seat *seat, const void *data,
+			     size_t size, enum wl_keyboard_keymap_format format)
+{
+	if (!seat->keyboard)
+		return;
+
+	return wlb_keyboard_set_keymap(seat->keyboard, data, size, format);
+}
+
+WL_EXPORT void
+wlb_seat_keyboard_key(struct wlb_seat *seat, uint32_t time, uint32_t key,
+		      enum wl_keyboard_key_state state)
+{
+	if (!seat->keyboard)
+		return;
+	
+	wlb_keyboard_key(seat->keyboard, time, key, state);
+}
+
+WL_EXPORT void
+wlb_seat_keyboard_modifiers(struct wlb_seat *seat, uint32_t mods_depressed,
+			    uint32_t mods_latched, uint32_t mods_locked,
+			    uint32_t group)
+{
+	if (!seat->keyboard)
+		return;
+	
+	wlb_keyboard_modifiers(seat->keyboard, mods_depressed, mods_latched,
+			       mods_locked, group);
+}
+
+WL_EXPORT void
+wlb_seat_keyboard_enter(struct wlb_seat *seat, const struct wl_array *keys)
+{
+}
+
+WL_EXPORT void
+wlb_seat_keyboard_leave(struct wlb_seat *seat)
+{
 }
 
 WL_EXPORT void

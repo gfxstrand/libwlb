@@ -177,6 +177,45 @@ void
 wlb_pointer_send_axis(struct wlb_pointer *pointer, uint32_t time,
 		      enum wl_pointer_axis axis, wl_fixed_t value);
 
+struct wlb_keyboard {
+	struct wlb_seat *seat;
+
+	struct wl_list resource_list;
+
+	struct wlb_surface *focus;
+	struct wl_listener surface_destroy_listener;
+
+	struct wl_array keys;
+
+	struct {
+		int fd;
+		void *data;
+		size_t size;
+		enum wl_keyboard_keymap_format format;
+	} keymap;
+};
+
+struct wlb_keyboard *
+wlb_keyboard_create(struct wlb_seat *seat);
+void
+wlb_keyboard_destroy(struct wlb_keyboard *keyboard);
+void
+wlb_keyboard_create_resource(struct wlb_keyboard *keyboard,
+			     struct wl_client *client, uint32_t id);
+void
+wlb_keyboard_set_focus(struct wlb_keyboard *keyboard,
+		       struct wlb_surface *focus);
+int
+wlb_keyboard_set_keymap(struct wlb_keyboard *keyboard, const void *data,
+			size_t size, enum wl_keyboard_keymap_format format);
+void
+wlb_keyboard_key(struct wlb_keyboard *keyboard, uint32_t time,
+		 uint32_t key, enum wl_keyboard_key_state state);
+void
+wlb_keyboard_modifiers(struct wlb_keyboard *keyboard, uint32_t mods_depressed,
+		       uint32_t mods_latched, uint32_t mods_locked,
+		       uint32_t group);
+
 struct wlb_seat {
 	struct wlb_compositor *compositor;
 	struct wl_list compositor_link;
@@ -185,6 +224,7 @@ struct wlb_seat {
 	uint32_t capabilities;
 
 	struct wlb_pointer *pointer;
+	struct wlb_keyboard *keyboard;
 };
 
 int wlb_util_create_tmpfile(size_t size);

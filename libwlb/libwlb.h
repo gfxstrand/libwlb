@@ -77,11 +77,20 @@ wlb_seat_create(struct wlb_compositor *compositor, uint32_t capabilities);
 WL_EXPORT void
 wlb_seat_destroy(struct wlb_seat *seat);
 
-void
+WL_EXPORT int
+wlb_seat_keyboard_set_keymap(struct wlb_seat *seat, const void *keymap,
+			     size_t len, enum wl_keyboard_keymap_format format);
+WL_EXPORT void
 wlb_seat_keyboard_key(struct wlb_seat *seat, uint32_t time, uint32_t key,
 		      enum wl_keyboard_key_state state);
-void
-wlb_seat_keyboard_modifiers(struct wlb_seat *seat, uint32_t serial);
+WL_EXPORT void
+wlb_seat_keyboard_modifiers(struct wlb_seat *seat, uint32_t mods_depressed,
+			    uint32_t mods_latched, uint32_t mods_locked,
+			    uint32_t group);
+WL_EXPORT void
+wlb_seat_keyboard_enter(struct wlb_seat *seat, const struct wl_array *keys);
+WL_EXPORT void
+wlb_seat_keyboard_leave(struct wlb_seat *seat);
 
 WL_EXPORT void
 wlb_seat_pointer_motion_relative(struct wlb_seat *seat, uint32_t time,
