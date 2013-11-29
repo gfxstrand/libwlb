@@ -24,6 +24,7 @@
 #define LIBWLB_WLB_PRIVATE_H
 
 #include "libwlb.h"
+#include "config.h"
 #include "fullscreen-shell-server-protocol.h"
 
 #include <pixman.h>

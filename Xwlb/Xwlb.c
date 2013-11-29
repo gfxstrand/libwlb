@@ -44,6 +44,7 @@
 
 #include <pixman.h>
 
+#include "config.h"
 #include "../libwlb/libwlb.h"
 
 #define DEFAULT_AXIS_STEP_DISTANCE wl_fixed_from_int(10)
@@ -244,7 +245,8 @@ x11_compositor_setup_xkb(struct x11_compositor *c)
 
 	ext = xcb_get_extension_data(c->conn, &xcb_xkb_id);
 	if (!ext) {
-		weston_log("XKB extension not available on host X11 server\n");
+		fprintf(stderr,
+			"XKB extension not available on host X11 server\n");
 		return;
 	}
 	c->xkb_event_base = ext->first_event;
@@ -259,7 +261,8 @@ x11_compositor_setup_xkb(struct x11_compositor *c)
 					       NULL);
 	error = xcb_request_check(c->conn, select);
 	if (error) {
-		weston_log("error: failed to select for XKB state events\n");
+		fprintf(stderr,
+			"error: failed to select for XKB state events\n");
 		free(error);
 		return;
 	}
@@ -269,15 +272,16 @@ x11_compositor_setup_xkb(struct x11_compositor *c)
 					XCB_XKB_MINOR_VERSION);
 	use_ext_reply = xcb_xkb_use_extension_reply(c->conn, use_ext, NULL);
 	if (!use_ext_reply) {
-		weston_log("couldn't start using XKB extension\n");
+		fprintf(stderr, "couldn't start using XKB extension\n");
 		return;
 	}
 
 	if (!use_ext_reply->supported) {
-		weston_log("XKB extension version on the server is too old "
-			   "(want %d.%d, has %d.%d)\n",
-			   XCB_XKB_MAJOR_VERSION, XCB_XKB_MINOR_VERSION,
-			   use_ext_reply->serverMajor, use_ext_reply->serverMinor);
+		fprintf(stderr,
+			"XKB extension version on the server is too old "
+			"(want %d.%d, has %d.%d)\n",
+			XCB_XKB_MAJOR_VERSION, XCB_XKB_MINOR_VERSION,
+			use_ext_reply->serverMajor, use_ext_reply->serverMinor);
 		free(use_ext_reply);
 		return;
 	}
@@ -293,8 +297,8 @@ x11_compositor_setup_xkb(struct x11_compositor *c)
 	pcf_reply = xcb_xkb_per_client_flags_reply(c->conn, pcf, NULL);
 	if (!pcf_reply ||
 	    !(pcf_reply->value & XCB_XKB_PER_CLIENT_FLAG_DETECTABLE_AUTO_REPEAT)) {
-		weston_log("failed to set XKB per-client flags, not using "
-			   "detectable repeat\n");
+		fprintf(stderr, "failed to set XKB per-client flags, not using "
+			"detectable repeat\n");
 		free(pcf_reply);
 		return;
 	}
@@ -303,7 +307,7 @@ x11_compositor_setup_xkb(struct x11_compositor *c)
 	state = xcb_xkb_get_state(c->conn, XCB_XKB_ID_USE_CORE_KBD);
 	state_reply = xcb_xkb_get_state_reply(c->conn, state, NULL);
 	if (!state_reply) {
-		weston_log("failed to get initial XKB state\n");
+		fprintf(stderr, "failed to get initial XKB state\n");
 		return;
 	}
 
@@ -329,14 +333,20 @@ static void
 update_xkb_keymap(struct x11_compositor *c)
 {
 	struct xkb_keymap *keymap;
+	char *keymap_str;
 
 	keymap = x11_compositor_get_keymap(c);
 	if (!keymap) {
-		weston_log("failed to get XKB keymap\n");
+		fprintf(stderr, "failed to get XKB keymap\n");
 		return;
 	}
-	weston_seat_update_keymap(&c->core_seat, keymap);
-	xkb_keymap_unref(keymap);
+	xkb_keymap_unref(c->xkb.keymap);
+	c->xkb.keymap = keymap;
+	keymap_str = xkb_keymap_get_as_string(c->xkb.keymap,
+					      XKB_KEYMAP_FORMAT_TEXT_V1);
+	wlb_seat_keyboard_set_keymap(c->seat, keymap_str, strlen(keymap_str),
+				     WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1);
+	free(keymap_str);
 }
 #endif
 
@@ -472,7 +482,7 @@ x11_compositor_find_output(struct x11_compositor *c, xcb_window_t window)
 static void
 update_xkb_state(struct x11_compositor *c, xcb_xkb_state_notify_event_t *state)
 {
-	xkb_state_update_mask(c->xkb_state,
+	xkb_state_update_mask(c->xkb.state,
 			      get_xkb_mod_mask(c, state->baseMods),
 			      get_xkb_mod_mask(c, state->latchedMods),
 			      get_xkb_mod_mask(c, state->lockedMods),
@@ -737,7 +747,7 @@ x11_compositor_handle_event(int fd, uint32_t mask, void *data)
 			key_release = (xcb_key_press_event_t *) event;
 			wlb_seat_keyboard_key(c->seat,
 					      x11_compositor_get_time(),
-					      key_press->detail - 8,
+					      key_release->detail - 8,
 					      WL_KEYBOARD_KEY_STATE_RELEASED);
 			break;
 		case XCB_BUTTON_PRESS:
