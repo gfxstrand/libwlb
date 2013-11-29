@@ -36,6 +36,7 @@ AC_ARG_ENABLE(x11-backend, [  --enable-x11-backend],,
 AM_CONDITIONAL(ENABLE_X11_BACKEND, test x$enable_x11_backend = xyes)
 if test x$enable_x11_backend = xyes; then
   X11_BACKEND_MODULES="xcb x11 x11-xcb xcb-shm"
+  X11_BACKEND_MODULES="$X11_BACKEND_MODULES xkbcommon >= 0.3.0"
   PKG_CHECK_MODULES(X11_BACKEND, [$X11_BACKEND_MODULES])
 fi
 

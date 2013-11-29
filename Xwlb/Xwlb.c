@@ -35,8 +35,12 @@
 
 #include <xcb/xcb.h>
 #include <xcb/shm.h>
+#include <xcb/xkb.h>
+
 #include <X11/Xlib.h>
 #include <X11/Xlib-xcb.h>
+
+#include <xkbcommon/xkbcommon.h>
 
 #include <pixman.h>
 
@@ -54,9 +58,44 @@ struct x11_compositor {
 
 	struct wl_array keys;
 	struct wl_event_source *xcb_source;
+	unsigned int has_xkb;
+	uint8_t xkb_event_base;
+
+	struct {
+		struct xkb_context *context;
+		struct xkb_keymap *keymap;
+		struct xkb_state *state;
+
+		uint32_t mods_depressed;
+		uint32_t mods_latched;
+		uint32_t mods_locked;
+
+		uint32_t mod_shift;
+		uint32_t mod_caps;
+		uint32_t mod_ctrl;
+		uint32_t mod_alt;
+		uint32_t mod_mod2;
+		uint32_t mod_mod3;
+		uint32_t mod_super;
+		uint32_t mod_mod5;
+	} xkb;
 
 	struct wl_list output_list;
 	struct wlb_seat *seat;
+
+	struct {
+		xkb_mod_index_t shift_mod;
+		xkb_mod_index_t caps_mod;
+		xkb_mod_index_t ctrl_mod;
+		xkb_mod_index_t alt_mod;
+		xkb_mod_index_t mod2_mod;
+		xkb_mod_index_t mod3_mod;
+		xkb_mod_index_t super_mod;
+		xkb_mod_index_t mod5_mod;
+		xkb_led_index_t num_led;
+		xkb_led_index_t caps_led;
+		xkb_led_index_t scroll_led;
+	} xkb_info;
 
 	struct {
 		xcb_atom_t wm_protocols;
@@ -94,6 +133,213 @@ struct x11_output {
 };
 
 #define ARRAY_LENGTH(a) (sizeof (a) / sizeof (a)[0])
+
+static struct xkb_keymap *
+x11_compositor_get_keymap(struct x11_compositor *c)
+{
+	xcb_get_property_cookie_t cookie;
+	xcb_get_property_reply_t *reply;
+	struct xkb_rule_names names;
+	struct xkb_keymap *ret;
+	const char *value_all, *value_part;
+	int length_all, length_part;
+
+	memset(&names, 0, sizeof(names));
+
+	cookie = xcb_get_property(c->conn, 0, c->screen->root,
+				  c->atom.xkb_names, c->atom.string, 0, 1024);
+	reply = xcb_get_property_reply(c->conn, cookie, NULL);
+	if (reply == NULL)
+		return NULL;
+
+	value_all = xcb_get_property_value(reply);
+	length_all = xcb_get_property_value_length(reply);
+	value_part = value_all;
+
+#define copy_prop_value(to) \
+	length_part = strlen(value_part); \
+	if (value_part + length_part < (value_all + length_all) && \
+	    length_part > 0) \
+		names.to = value_part; \
+	value_part += length_part + 1;
+
+	copy_prop_value(rules);
+	copy_prop_value(model);
+	copy_prop_value(layout);
+	copy_prop_value(variant);
+	copy_prop_value(options);
+#undef copy_prop_value
+
+	ret = xkb_map_new_from_names(c->xkb.context, &names, 0);
+
+	free(reply);
+	return ret;
+}
+
+static void
+x11_compositor_get_xkb_info(struct x11_compositor *c)
+{
+	c->xkb.mod_shift = xkb_map_mod_get_index(c->xkb.keymap,
+						 XKB_MOD_NAME_SHIFT);
+	c->xkb.mod_caps = xkb_map_mod_get_index(c->xkb.keymap,
+						XKB_MOD_NAME_CAPS);
+	c->xkb.mod_ctrl = xkb_map_mod_get_index(c->xkb.keymap,
+						XKB_MOD_NAME_CTRL);
+	c->xkb.mod_alt = xkb_map_mod_get_index(c->xkb.keymap,
+					       XKB_MOD_NAME_ALT);
+	c->xkb.mod_mod2 = xkb_map_mod_get_index(c->xkb.keymap, "Mod2");
+	c->xkb.mod_mod3 = xkb_map_mod_get_index(c->xkb.keymap, "Mod3");
+	c->xkb.mod_super = xkb_map_mod_get_index(c->xkb.keymap,
+						 XKB_MOD_NAME_LOGO);
+	c->xkb.mod_mod5 = xkb_map_mod_get_index(c->xkb.keymap, "Mod5");
+}
+
+static uint32_t
+get_xkb_mod_mask(struct x11_compositor *c, uint32_t in)
+{
+	uint32_t ret = 0;
+
+	if ((in & ShiftMask) && c->xkb.mod_shift != XKB_MOD_INVALID)
+		ret |= (1 << c->xkb.mod_shift);
+	if ((in & LockMask) && c->xkb.mod_caps != XKB_MOD_INVALID)
+		ret |= (1 << c->xkb.mod_caps);
+	if ((in & ControlMask) && c->xkb.mod_ctrl != XKB_MOD_INVALID)
+		ret |= (1 << c->xkb.mod_ctrl);
+	if ((in & Mod1Mask) && c->xkb.mod_alt != XKB_MOD_INVALID)
+		ret |= (1 << c->xkb.mod_alt);
+	if ((in & Mod2Mask) && c->xkb.mod_mod2 != XKB_MOD_INVALID)
+		ret |= (1 << c->xkb.mod_mod2);
+	if ((in & Mod3Mask) && c->xkb.mod_mod3 != XKB_MOD_INVALID)
+		ret |= (1 << c->xkb.mod_mod3);
+	if ((in & Mod4Mask) && c->xkb.mod_super != XKB_MOD_INVALID)
+		ret |= (1 << c->xkb.mod_super);
+	if ((in & Mod5Mask) && c->xkb.mod_mod5 != XKB_MOD_INVALID)
+		ret |= (1 << c->xkb.mod_mod5);
+
+	return ret;
+}
+
+static void
+x11_compositor_setup_xkb(struct x11_compositor *c)
+{
+#ifndef HAVE_XCB_XKB
+	fprintf(stderr, "XCB-XKB not available during build\n");
+	c->has_xkb = 0;
+	c->xkb_event_base = 0;
+	return;
+#else
+	const xcb_query_extension_reply_t *ext;
+	xcb_generic_error_t *error;
+	xcb_void_cookie_t select;
+	xcb_xkb_use_extension_cookie_t use_ext;
+	xcb_xkb_use_extension_reply_t *use_ext_reply;
+	xcb_xkb_per_client_flags_cookie_t pcf;
+	xcb_xkb_per_client_flags_reply_t *pcf_reply;
+	xcb_xkb_get_state_cookie_t state;
+	xcb_xkb_get_state_reply_t *state_reply;
+	uint32_t values[1] = { XCB_EVENT_MASK_PROPERTY_CHANGE };
+
+	c->has_xkb = 0;
+	c->xkb_event_base = 0;
+
+	ext = xcb_get_extension_data(c->conn, &xcb_xkb_id);
+	if (!ext) {
+		weston_log("XKB extension not available on host X11 server\n");
+		return;
+	}
+	c->xkb_event_base = ext->first_event;
+
+	select = xcb_xkb_select_events_checked(c->conn,
+					       XCB_XKB_ID_USE_CORE_KBD,
+					       XCB_XKB_EVENT_TYPE_STATE_NOTIFY,
+					       0,
+					       XCB_XKB_EVENT_TYPE_STATE_NOTIFY,
+					       0,
+					       0,
+					       NULL);
+	error = xcb_request_check(c->conn, select);
+	if (error) {
+		weston_log("error: failed to select for XKB state events\n");
+		free(error);
+		return;
+	}
+
+	use_ext = xcb_xkb_use_extension(c->conn,
+					XCB_XKB_MAJOR_VERSION,
+					XCB_XKB_MINOR_VERSION);
+	use_ext_reply = xcb_xkb_use_extension_reply(c->conn, use_ext, NULL);
+	if (!use_ext_reply) {
+		weston_log("couldn't start using XKB extension\n");
+		return;
+	}
+
+	if (!use_ext_reply->supported) {
+		weston_log("XKB extension version on the server is too old "
+			   "(want %d.%d, has %d.%d)\n",
+			   XCB_XKB_MAJOR_VERSION, XCB_XKB_MINOR_VERSION,
+			   use_ext_reply->serverMajor, use_ext_reply->serverMinor);
+		free(use_ext_reply);
+		return;
+	}
+	free(use_ext_reply);
+
+	pcf = xcb_xkb_per_client_flags(c->conn,
+				       XCB_XKB_ID_USE_CORE_KBD,
+				       XCB_XKB_PER_CLIENT_FLAG_DETECTABLE_AUTO_REPEAT,
+				       XCB_XKB_PER_CLIENT_FLAG_DETECTABLE_AUTO_REPEAT,
+				       0,
+				       0,
+				       0);
+	pcf_reply = xcb_xkb_per_client_flags_reply(c->conn, pcf, NULL);
+	if (!pcf_reply ||
+	    !(pcf_reply->value & XCB_XKB_PER_CLIENT_FLAG_DETECTABLE_AUTO_REPEAT)) {
+		weston_log("failed to set XKB per-client flags, not using "
+			   "detectable repeat\n");
+		free(pcf_reply);
+		return;
+	}
+	free(pcf_reply);
+
+	state = xcb_xkb_get_state(c->conn, XCB_XKB_ID_USE_CORE_KBD);
+	state_reply = xcb_xkb_get_state_reply(c->conn, state, NULL);
+	if (!state_reply) {
+		weston_log("failed to get initial XKB state\n");
+		return;
+	}
+
+	xkb_state_update_mask(c->xkb.state,
+			      get_xkb_mod_mask(c, state_reply->baseMods),
+			      get_xkb_mod_mask(c, state_reply->latchedMods),
+			      get_xkb_mod_mask(c, state_reply->lockedMods),
+			      0,
+			      0,
+			      state_reply->group);
+
+	free(state_reply);
+
+	xcb_change_window_attributes(c->conn, c->screen->root,
+				     XCB_CW_EVENT_MASK, values);
+
+	c->has_xkb = 1;
+#endif
+}
+
+#ifdef HAVE_XCB_XKB
+static void
+update_xkb_keymap(struct x11_compositor *c)
+{
+	struct xkb_keymap *keymap;
+
+	keymap = x11_compositor_get_keymap(c);
+	if (!keymap) {
+		weston_log("failed to get XKB keymap\n");
+		return;
+	}
+	weston_seat_update_keymap(&c->core_seat, keymap);
+	xkb_keymap_unref(keymap);
+}
+#endif
+
 #define F(field) offsetof(struct x11_compositor, field)
 
 struct wm_normal_hints {
@@ -107,6 +353,42 @@ struct wm_normal_hints {
 	int32_t base_width, base_height;
 	int32_t win_gravity;
 };
+
+static int
+x11_input_create(struct x11_compositor *c)
+{
+	struct xkb_keymap *keymap;
+	char *keymap_str;
+
+	c->seat = wlb_seat_create(c->compositor,
+				  WL_SEAT_CAPABILITY_POINTER |
+				  WL_SEAT_CAPABILITY_KEYBOARD);
+
+	c->xkb.context = xkb_context_new(0);
+
+	c->xkb.keymap = x11_compositor_get_keymap(c);
+	keymap_str = xkb_keymap_get_as_string(c->xkb.keymap,
+					      XKB_KEYMAP_FORMAT_TEXT_V1);
+	wlb_seat_keyboard_set_keymap(c->seat, keymap_str, strlen(keymap_str),
+				     WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1);
+	free(keymap_str);
+
+	c->xkb.state = xkb_state_new(c->xkb.keymap);
+	x11_compositor_setup_xkb(c);
+
+	return 0;
+}
+
+static void
+x11_input_destroy(struct x11_compositor *c)
+{
+	xkb_state_unref(c->xkb.state);
+	xkb_keymap_unref(c->xkb.keymap);
+	xkb_context_unref(c->xkb.context);
+	memset(&c->xkb, 0, sizeof(c->xkb));
+
+	wlb_seat_destroy(c->seat);
+}
 
 #define WM_NORMAL_HINTS_MIN_SIZE	16
 #define WM_NORMAL_HINTS_MAX_SIZE	32
@@ -186,6 +468,64 @@ x11_compositor_find_output(struct x11_compositor *c, xcb_window_t window)
 	assert(0);
 }
 
+#ifdef HAVE_XCB_XKB
+static void
+update_xkb_state(struct x11_compositor *c, xcb_xkb_state_notify_event_t *state)
+{
+	xkb_state_update_mask(c->xkb_state,
+			      get_xkb_mod_mask(c, state->baseMods),
+			      get_xkb_mod_mask(c, state->latchedMods),
+			      get_xkb_mod_mask(c, state->lockedMods),
+			      0,
+			      0,
+			      state->group);
+
+	wlb_seat_keyboard_modifiers(c->seat,
+				    get_xkb_mod_mask(c, state->baseMods),
+				    get_xkb_mod_mask(c, state->latchedMods),
+				    get_xkb_mod_mask(c, state->lockedMods),
+				    0);
+}
+#endif
+
+/**
+ * This is monumentally unpleasant.  If we don't have XCB-XKB bindings,
+ * the best we can do (given that XCB also lacks XI2 support), is to take
+ * the state from the core key events.  Unfortunately that only gives us
+ * the effective (i.e. union of depressed/latched/locked) state, and we
+ * need the granularity.
+ *
+ * So we still update the state with every key event we see, but also use
+ * the state field from X11 events as a mask so we don't get any stuck
+ * modifiers.
+ */
+static void
+update_xkb_state_from_core(struct x11_compositor *c, uint16_t x11_mask)
+{
+	uint32_t mask = get_xkb_mod_mask(c, x11_mask);
+
+	xkb_state_update_mask(c->xkb.state,
+			      c->xkb.mods_depressed & mask,
+			      c->xkb.mods_latched & mask,
+			      c->xkb.mods_locked & mask,
+			      0,
+			      0,
+			      (x11_mask >> 13) & 3);
+
+	c->xkb.mods_depressed =
+		xkb_state_serialize_mods(c->xkb.state, XKB_STATE_DEPRESSED);
+	c->xkb.mods_latched =
+		xkb_state_serialize_mods(c->xkb.state, XKB_STATE_LATCHED);
+	c->xkb.mods_locked =
+		xkb_state_serialize_mods(c->xkb.state, XKB_STATE_LOCKED);
+
+	wlb_seat_keyboard_modifiers(c->seat,
+				    c->xkb.mods_depressed,
+				    c->xkb.mods_latched,
+				    c->xkb.mods_locked,
+				    0);
+}
+
 static void
 x11_compositor_deliver_button_event(struct x11_compositor *c,
 				    xcb_generic_event_t *event, int state)
@@ -210,6 +550,9 @@ x11_compositor_deliver_button_event(struct x11_compositor *c,
 				 button_event->time);
 	else
 		xcb_ungrab_pointer(c->conn, button_event->time);
+
+	if (!c->has_xkb)
+		update_xkb_state_from_core(c, button_event->state);
 
 	switch (button_event->detail) {
 	default:
@@ -267,6 +610,8 @@ x11_compositor_deliver_motion_event(struct x11_compositor *c,
 	xcb_motion_notify_event_t *motion_notify =
 			(xcb_motion_notify_event_t *) event;
 
+	if (!c->has_xkb)
+		update_xkb_state_from_core(c, motion_notify->state);
 	output = x11_compositor_find_output(c, motion_notify->event);
 
 	wlb_seat_pointer_move_on_output(c->seat, x11_compositor_get_time(),
@@ -315,7 +660,6 @@ x11_compositor_handle_event(int fd, uint32_t mask, void *data)
 	while (x11_compositor_next_event(c, &event, mask)) {
 		response_type = event->response_type & ~0x80;
 
-#if 0
 		switch (prev ? prev->response_type & ~0x80 : 0x80) {
 		case XCB_KEY_RELEASE:
 			/* Suppress key repeat events; this is only used if we
@@ -336,11 +680,10 @@ x11_compositor_handle_event(int fd, uint32_t mask, void *data)
 				 * and fall through and handle the new
 				 * event below. */
 				update_xkb_state_from_core(c, key_release->state);
-				notify_key(&c->core_seat,
-					   weston_compositor_get_time(),
-					   key_release->detail - 8,
-					   WL_KEYBOARD_KEY_STATE_RELEASED,
-					   STATE_UPDATE_AUTOMATIC);
+				wlb_seat_keyboard_key(c->seat,
+						      x11_compositor_get_time(),
+						      key_release->detail - 8,
+						      WL_KEYBOARD_KEY_STATE_RELEASED);
 				free(prev);
 				prev = NULL;
 				break;
@@ -363,8 +706,7 @@ x11_compositor_handle_event(int fd, uint32_t mask, void *data)
 			 * event, rather than with the focus event.  I'm not
 			 * sure of the exact semantics around it and whether
 			 * we can ensure that we get both? */
-			notify_keyboard_focus_in(&c->core_seat, &c->keys,
-						 STATE_UPDATE_AUTOMATIC);
+			wlb_seat_keyboard_enter(c->seat, &c->keys);
 
 			free(prev);
 			prev = NULL;
@@ -375,19 +717,15 @@ x11_compositor_handle_event(int fd, uint32_t mask, void *data)
 			break;
 		}
 
-#endif
 		switch (response_type) {
-#if 0
 		case XCB_KEY_PRESS:
 			key_press = (xcb_key_press_event_t *) event;
 			if (!c->has_xkb)
 				update_xkb_state_from_core(c, key_press->state);
-			notify_key(&c->core_seat,
-				   weston_compositor_get_time(),
-				   key_press->detail - 8,
-				   WL_KEYBOARD_KEY_STATE_PRESSED,
-				   c->has_xkb ? STATE_UPDATE_NONE :
-						STATE_UPDATE_AUTOMATIC);
+			wlb_seat_keyboard_key(c->seat,
+					      x11_compositor_get_time(),
+					      key_press->detail - 8,
+					      WL_KEYBOARD_KEY_STATE_PRESSED);
 			break;
 		case XCB_KEY_RELEASE:
 			/* If we don't have XKB, we need to use the lame
@@ -397,13 +735,11 @@ x11_compositor_handle_event(int fd, uint32_t mask, void *data)
 				break;
 			}
 			key_release = (xcb_key_press_event_t *) event;
-			notify_key(&c->core_seat,
-				   weston_compositor_get_time(),
-				   key_release->detail - 8,
-				   WL_KEYBOARD_KEY_STATE_RELEASED,
-				   STATE_UPDATE_NONE);
+			wlb_seat_keyboard_key(c->seat,
+					      x11_compositor_get_time(),
+					      key_press->detail - 8,
+					      WL_KEYBOARD_KEY_STATE_RELEASED);
 			break;
-#endif
 		case XCB_BUTTON_PRESS:
 			x11_compositor_deliver_button_event(c, event, 1);
 			break;
@@ -442,7 +778,6 @@ x11_compositor_handle_event(int fd, uint32_t mask, void *data)
 				wl_display_terminate(c->display);
 			break;
 
-#if 0
 		case XCB_FOCUS_IN:
 			focus_in = (xcb_focus_in_event_t *) event;
 			if (focus_in->mode == XCB_NOTIFY_MODE_WHILE_GRABBED)
@@ -456,12 +791,11 @@ x11_compositor_handle_event(int fd, uint32_t mask, void *data)
 			if (focus_in->mode == XCB_NOTIFY_MODE_WHILE_GRABBED ||
 			    focus_in->mode == XCB_NOTIFY_MODE_UNGRAB)
 				break;
-			notify_keyboard_focus_out(&c->core_seat);
+			wlb_seat_keyboard_leave(c->seat);
 			break;
 
 		default:
 			break;
-#endif
 		}
 
 #ifdef HAVE_XCB_XKB
@@ -541,7 +875,9 @@ x11_compositor_create(struct wl_display *display)
 	x11_compositor_get_resources(c);
 	//x11_compositor_get_wm_info(c);
 
-	c->seat = wlb_seat_create(c->compositor, WL_SEAT_CAPABILITY_POINTER);
+	if (x11_input_create(c) < 0)
+		goto err_xdisplay;
+
 	wl_list_init(&c->output_list);
 
 	loop = wl_display_get_event_loop(c->display);
@@ -761,11 +1097,14 @@ x11_output_create(struct x11_compositor *c, int32_t width, int32_t height)
 	};
 
 	values[0] |=
+		XCB_EVENT_MASK_KEY_PRESS |
+		XCB_EVENT_MASK_KEY_RELEASE |
 		XCB_EVENT_MASK_BUTTON_PRESS |
 		XCB_EVENT_MASK_BUTTON_RELEASE |
 		XCB_EVENT_MASK_POINTER_MOTION |
 		XCB_EVENT_MASK_ENTER_WINDOW |
 		XCB_EVENT_MASK_LEAVE_WINDOW |
+		XCB_EVENT_MASK_KEYMAP_STATE |
 		XCB_EVENT_MASK_FOCUS_CHANGE;
 
 	output = calloc(1, sizeof *output);
