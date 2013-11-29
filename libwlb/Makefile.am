@@ -6,6 +6,7 @@ include_HEADERS = \
 libwlb_la_LIBADD = $(WAYLAND_LIBS) $(PIXMAN_LIBS)
 libwlb_la_SOURCES =			\
 	fullscreen-shell-protocol.c	\
+	util.c				\
 	surface.c			\
 	output.c			\
 	input.c				\

@@ -214,9 +214,3 @@ wlb_compositor_destroy(struct wlb_compositor *comp)
 
 	free(comp);
 }
-
-void *
-zalloc(size_t size)
-{
-	return calloc(1, size);
-}

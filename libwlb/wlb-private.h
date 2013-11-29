@@ -187,6 +187,8 @@ struct wlb_seat {
 	struct wlb_pointer *pointer;
 };
 
+int wlb_util_create_tmpfile(size_t size);
+
 void *zalloc(size_t size);
 
 #endif /* !defined LIBWLB_WLB_PRIVATE_H */
