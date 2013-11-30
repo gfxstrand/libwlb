@@ -43,7 +43,7 @@ pointer_output_destroyed(struct wl_listener *listener, void *data)
 	wlb_pointer_set_focus(pointer, NULL);
 }
 
-struct wlb_pointer *
+WL_EXPORT struct wlb_pointer *
 wlb_pointer_create(struct wlb_seat *seat)
 {
 	struct wlb_pointer *pointer;
@@ -59,16 +59,20 @@ wlb_pointer_create(struct wlb_seat *seat)
 	pointer->surface_destroy_listener.notify = pointer_surface_destroyed;
 	pointer->output_destroy_listener.notify = pointer_output_destroyed;
 
+	seat->pointer = pointer;
+
 	return pointer;
 }
 
-void
+WL_EXPORT void
 wlb_pointer_destroy(struct wlb_pointer *pointer)
 {
 	struct wl_resource *resource, *rnext;
 
 	wl_resource_for_each_safe(resource, rnext, &pointer->resource_list)
 		wl_resource_destroy(resource);
+	
+	pointer->seat->pointer = NULL;
 
 	free(pointer);
 }
@@ -179,9 +183,8 @@ wlb_pointer_update_focus(struct wlb_pointer *pointer)
 	wlb_pointer_set_focus(pointer, output);
 }
 
-void
-wlb_pointer_send_motion(struct wlb_pointer *pointer, uint32_t time,
-			wl_fixed_t x, wl_fixed_t y)
+static void
+pointer_send_motion(struct wlb_pointer *pointer, uint32_t time)
 {
 	struct wl_resource *resource;
 	wl_fixed_t sx, sy;
@@ -198,9 +201,35 @@ wlb_pointer_send_motion(struct wlb_pointer *pointer, uint32_t time,
 		wl_pointer_send_motion(resource, time, sx, sy);
 }
 
-void
-wlb_pointer_send_button(struct wlb_pointer *pointer, uint32_t time,
-			uint32_t button, enum wl_pointer_button_state state)
+WL_EXPORT void
+wlb_pointer_motion_relative(struct wlb_pointer *pointer, uint32_t time,
+			    wl_fixed_t dx, wl_fixed_t dy)
+{
+	wlb_pointer_motion_absolute(pointer, time,
+				    pointer->x + dx, pointer->y + dy);
+}
+
+WL_EXPORT void
+wlb_pointer_motion_absolute(struct wlb_pointer *pointer, uint32_t time,
+			    wl_fixed_t x, wl_fixed_t y)
+{
+	struct wlb_output *output;
+
+	pointer->x = x;
+	pointer->y = y;
+	
+	if (pointer->button_count > 0) {
+		output = wlb_output_find_with_surface(pointer->seat->compositor, x, y);
+		if (pointer->focus != output)
+			wlb_pointer_set_focus(pointer, output);
+	}
+
+	pointer_send_motion(pointer, time);
+}
+
+WL_EXPORT void
+wlb_pointer_button(struct wlb_pointer *pointer, uint32_t time,
+		   uint32_t button, enum wl_pointer_button_state state)
 {
 	struct wl_resource *resource;
 	uint32_t serial;
@@ -220,12 +249,41 @@ wlb_pointer_send_button(struct wlb_pointer *pointer, uint32_t time,
 		wl_pointer_send_button(resource, serial, time, button, state);
 }
 
-void
-wlb_pointer_send_axis(struct wlb_pointer *pointer, uint32_t time,
-		      enum wl_pointer_axis axis, wl_fixed_t value)
+WL_EXPORT void
+wlb_pointer_axis(struct wlb_pointer *pointer, uint32_t time,
+		 enum wl_pointer_axis axis, wl_fixed_t value)
 {
 	struct wl_resource *resource;
 
 	wl_resource_for_each(resource, &pointer->resource_list)
 		wl_pointer_send_axis(resource, time, axis, value);
+}
+
+WL_EXPORT void
+wlb_pointer_enter_output(struct wlb_pointer *pointer, struct wlb_output *output,
+			 wl_fixed_t x, wl_fixed_t y)
+{
+	pointer->x = x + wl_fixed_from_int(output->x);
+	pointer->y = y + wl_fixed_from_int(output->y);
+	
+	wlb_pointer_set_focus(pointer, output);
+}
+
+WL_EXPORT void
+wlb_pointer_move_on_output(struct wlb_pointer *pointer, uint32_t time,
+			   struct wlb_output *output,
+			   wl_fixed_t x, wl_fixed_t y)
+{
+	pointer->x = x + wl_fixed_from_int(output->x);
+	pointer->y = y + wl_fixed_from_int(output->y);
+
+	wlb_pointer_set_focus(pointer, output);
+
+	pointer_send_motion(pointer, time);
+}
+
+WL_EXPORT void
+wlb_pointer_leave_output(struct wlb_pointer *pointer)
+{
+	wlb_pointer_set_focus(pointer, NULL);
 }

@@ -38,10 +38,13 @@ keyboard_surface_destroyed(struct wl_listener *listener, void *data)
 	wlb_keyboard_set_focus(keyboard, NULL);
 }
 
-struct wlb_keyboard *
+WL_EXPORT struct wlb_keyboard *
 wlb_keyboard_create(struct wlb_seat *seat)
 {
 	struct wlb_keyboard *keyboard;
+
+	if (seat->keyboard)
+		return NULL;
 
 	keyboard = zalloc(sizeof *keyboard);
 	if (!keyboard)
@@ -55,16 +58,20 @@ wlb_keyboard_create(struct wlb_seat *seat)
 	
 	keyboard->surface_destroy_listener.notify = keyboard_surface_destroyed;
 
+	seat->keyboard = keyboard;
+
 	return keyboard;
 }
 
-void
+WL_EXPORT void
 wlb_keyboard_destroy(struct wlb_keyboard *keyboard)
 {
 	struct wl_resource *resource, *rnext;
 
 	wl_resource_for_each_safe(resource, rnext, &keyboard->resource_list)
 		wl_resource_destroy(resource);
+	
+	keyboard->seat->keyboard = NULL;
 	
 	if (keyboard->keymap.data) {
 		munmap(keyboard->keymap.data, keyboard->keymap.size);
@@ -154,7 +161,7 @@ wlb_keyboard_set_focus(struct wlb_keyboard *keyboard,
 	}
 }
 
-int
+WL_EXPORT int
 wlb_keyboard_set_keymap(struct wlb_keyboard *keyboard, const void *data,
 			size_t size, enum wl_keyboard_keymap_format format)
 {
@@ -192,7 +199,7 @@ keyboard_ensure_focus(struct wlb_keyboard *keyboard)
 				       keyboard->seat->pointer->focus_surface);
 }
 
-void
+WL_EXPORT void
 wlb_keyboard_key(struct wlb_keyboard *keyboard, uint32_t time,
 		 uint32_t key, enum wl_keyboard_key_state state)
 {
@@ -224,7 +231,7 @@ wlb_keyboard_key(struct wlb_keyboard *keyboard, uint32_t time,
 		wl_keyboard_send_key(resource, serial, time, key, state);
 }
 
-void
+WL_EXPORT void
 wlb_keyboard_modifiers(struct wlb_keyboard *keyboard, uint32_t mods_depressed,
 		       uint32_t mods_latched, uint32_t mods_locked,
 		       uint32_t group)
@@ -241,4 +248,16 @@ wlb_keyboard_modifiers(struct wlb_keyboard *keyboard, uint32_t mods_depressed,
 	wl_resource_for_each(resource, &keyboard->resource_list)
 		wl_keyboard_send_modifiers(resource, serial, mods_depressed,
 					   mods_latched, mods_locked, group);
+}
+
+WL_EXPORT void
+wlb_keyboard_enter(struct wlb_keyboard *keyboard, const struct wl_array *keys)
+{
+	/* TODO */
+}
+
+WL_EXPORT void
+wlb_keyboard_leave(struct wlb_keyboard *keyboard)
+{
+	/* TODO */
 }

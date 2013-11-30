@@ -222,11 +222,14 @@ struct wlb_seat {
 	struct wl_list compositor_link;
 	struct wl_global *global;
 
-	uint32_t capabilities;
+	struct wl_list resource_list;
 
 	struct wlb_pointer *pointer;
 	struct wlb_keyboard *keyboard;
 };
+
+void
+wlb_seat_send_capabilities(struct wlb_seat *seat);
 
 int wlb_util_create_tmpfile(size_t size);
 

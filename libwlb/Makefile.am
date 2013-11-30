@@ -9,7 +9,7 @@ libwlb_la_SOURCES =			\
 	util.c				\
 	surface.c			\
 	output.c			\
-	input.c				\
+	seat.c				\
 	pointer.c			\
 	keyboard.c			\
 	pixman-renderer.c		\

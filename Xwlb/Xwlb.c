@@ -83,6 +83,8 @@ struct x11_compositor {
 
 	struct wl_list output_list;
 	struct wlb_seat *seat;
+	struct wlb_pointer *pointer;
+	struct wlb_keyboard *keyboard;
 
 	struct {
 		xkb_mod_index_t shift_mod;
@@ -344,8 +346,8 @@ update_xkb_keymap(struct x11_compositor *c)
 	c->xkb.keymap = keymap;
 	keymap_str = xkb_keymap_get_as_string(c->xkb.keymap,
 					      XKB_KEYMAP_FORMAT_TEXT_V1);
-	wlb_seat_keyboard_set_keymap(c->seat, keymap_str, strlen(keymap_str),
-				     WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1);
+	wlb_keyboard_set_keymap(c->keyboard, keymap_str, strlen(keymap_str),
+				WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1);
 	free(keymap_str);
 }
 #endif
@@ -370,17 +372,17 @@ x11_input_create(struct x11_compositor *c)
 	struct xkb_keymap *keymap;
 	char *keymap_str;
 
-	c->seat = wlb_seat_create(c->compositor,
-				  WL_SEAT_CAPABILITY_POINTER |
-				  WL_SEAT_CAPABILITY_KEYBOARD);
+	c->seat = wlb_seat_create(c->compositor);
+	c->pointer = wlb_pointer_create(c->seat);
+	c->keyboard = wlb_keyboard_create(c->seat);
 
 	c->xkb.context = xkb_context_new(0);
 
 	c->xkb.keymap = x11_compositor_get_keymap(c);
 	keymap_str = xkb_keymap_get_as_string(c->xkb.keymap,
 					      XKB_KEYMAP_FORMAT_TEXT_V1);
-	wlb_seat_keyboard_set_keymap(c->seat, keymap_str, strlen(keymap_str),
-				     WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1);
+	wlb_keyboard_set_keymap(c->keyboard, keymap_str, strlen(keymap_str),
+				WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1);
 	free(keymap_str);
 
 	c->xkb.state = xkb_state_new(c->xkb.keymap);
@@ -490,11 +492,11 @@ update_xkb_state(struct x11_compositor *c, xcb_xkb_state_notify_event_t *state)
 			      0,
 			      state->group);
 
-	wlb_seat_keyboard_modifiers(c->seat,
-				    get_xkb_mod_mask(c, state->baseMods),
-				    get_xkb_mod_mask(c, state->latchedMods),
-				    get_xkb_mod_mask(c, state->lockedMods),
-				    0);
+	wlb_keyboard_modifiers(c->keyboard,
+			       get_xkb_mod_mask(c, state->baseMods),
+			       get_xkb_mod_mask(c, state->latchedMods),
+			       get_xkb_mod_mask(c, state->lockedMods),
+			       0);
 }
 #endif
 
@@ -529,11 +531,11 @@ update_xkb_state_from_core(struct x11_compositor *c, uint16_t x11_mask)
 	c->xkb.mods_locked =
 		xkb_state_serialize_mods(c->xkb.state, XKB_STATE_LOCKED);
 
-	wlb_seat_keyboard_modifiers(c->seat,
-				    c->xkb.mods_depressed,
-				    c->xkb.mods_latched,
-				    c->xkb.mods_locked,
-				    0);
+	wlb_keyboard_modifiers(c->keyboard,
+			       c->xkb.mods_depressed,
+			       c->xkb.mods_latched,
+			       c->xkb.mods_locked,
+			       0);
 }
 
 static void
@@ -578,37 +580,37 @@ x11_compositor_deliver_button_event(struct x11_compositor *c,
 		/* Axis are measured in pixels, but the xcb events are discrete
 		 * steps. Therefore move the axis by some pixels every step. */
 		if (state)
-			wlb_seat_pointer_axis(c->seat,
-					      x11_compositor_get_time(),
-					      WL_POINTER_AXIS_VERTICAL_SCROLL,
-					      -DEFAULT_AXIS_STEP_DISTANCE);
+			wlb_pointer_axis(c->pointer,
+					 x11_compositor_get_time(),
+					 WL_POINTER_AXIS_VERTICAL_SCROLL,
+					 -DEFAULT_AXIS_STEP_DISTANCE);
 		return;
 	case 5:
 		if (state)
-			wlb_seat_pointer_axis(c->seat,
-					      x11_compositor_get_time(),
-					      WL_POINTER_AXIS_VERTICAL_SCROLL,
-					      DEFAULT_AXIS_STEP_DISTANCE);
+			wlb_pointer_axis(c->pointer,
+					 x11_compositor_get_time(),
+					 WL_POINTER_AXIS_VERTICAL_SCROLL,
+					 DEFAULT_AXIS_STEP_DISTANCE);
 		return;
 	case 6:
 		if (state)
-			wlb_seat_pointer_axis(c->seat,
-					      x11_compositor_get_time(),
-					      WL_POINTER_AXIS_HORIZONTAL_SCROLL,
-					      -DEFAULT_AXIS_STEP_DISTANCE);
+			wlb_pointer_axis(c->pointer,
+					 x11_compositor_get_time(),
+					 WL_POINTER_AXIS_HORIZONTAL_SCROLL,
+					 -DEFAULT_AXIS_STEP_DISTANCE);
 		return;
 	case 7:
 		if (state)
-			wlb_seat_pointer_axis(c->seat,
-					      x11_compositor_get_time(),
-					      WL_POINTER_AXIS_HORIZONTAL_SCROLL,
-					      DEFAULT_AXIS_STEP_DISTANCE);
+			wlb_pointer_axis(c->pointer,
+					 x11_compositor_get_time(),
+					 WL_POINTER_AXIS_HORIZONTAL_SCROLL,
+					 DEFAULT_AXIS_STEP_DISTANCE);
 		return;
 	}
 
-	wlb_seat_pointer_button(c->seat, x11_compositor_get_time(), button,
-				state ? WL_POINTER_BUTTON_STATE_PRESSED :
-					WL_POINTER_BUTTON_STATE_RELEASED);
+	wlb_pointer_button(c->pointer, x11_compositor_get_time(), button,
+			   state ? WL_POINTER_BUTTON_STATE_PRESSED :
+				   WL_POINTER_BUTTON_STATE_RELEASED);
 }
 
 static void
@@ -624,10 +626,10 @@ x11_compositor_deliver_motion_event(struct x11_compositor *c,
 		update_xkb_state_from_core(c, motion_notify->state);
 	output = x11_compositor_find_output(c, motion_notify->event);
 
-	wlb_seat_pointer_move_on_output(c->seat, x11_compositor_get_time(),
-					output->output,
-					wl_fixed_from_int(motion_notify->event_x),
-					wl_fixed_from_int(motion_notify->event_y));
+	wlb_pointer_move_on_output(c->pointer, x11_compositor_get_time(),
+				   output->output,
+				   wl_fixed_from_int(motion_notify->event_x),
+				   wl_fixed_from_int(motion_notify->event_y));
 }
 
 static int
@@ -690,10 +692,10 @@ x11_compositor_handle_event(int fd, uint32_t mask, void *data)
 				 * and fall through and handle the new
 				 * event below. */
 				update_xkb_state_from_core(c, key_release->state);
-				wlb_seat_keyboard_key(c->seat,
-						      x11_compositor_get_time(),
-						      key_release->detail - 8,
-						      WL_KEYBOARD_KEY_STATE_RELEASED);
+				wlb_keyboard_key(c->keyboard,
+						 x11_compositor_get_time(),
+						 key_release->detail - 8,
+						 WL_KEYBOARD_KEY_STATE_RELEASED);
 				free(prev);
 				prev = NULL;
 				break;
@@ -716,7 +718,7 @@ x11_compositor_handle_event(int fd, uint32_t mask, void *data)
 			 * event, rather than with the focus event.  I'm not
 			 * sure of the exact semantics around it and whether
 			 * we can ensure that we get both? */
-			wlb_seat_keyboard_enter(c->seat, &c->keys);
+			wlb_keyboard_enter(c->keyboard, &c->keys);
 
 			free(prev);
 			prev = NULL;
@@ -732,10 +734,10 @@ x11_compositor_handle_event(int fd, uint32_t mask, void *data)
 			key_press = (xcb_key_press_event_t *) event;
 			if (!c->has_xkb)
 				update_xkb_state_from_core(c, key_press->state);
-			wlb_seat_keyboard_key(c->seat,
-					      x11_compositor_get_time(),
-					      key_press->detail - 8,
-					      WL_KEYBOARD_KEY_STATE_PRESSED);
+			wlb_keyboard_key(c->keyboard,
+					 x11_compositor_get_time(),
+					 key_press->detail - 8,
+					 WL_KEYBOARD_KEY_STATE_PRESSED);
 			break;
 		case XCB_KEY_RELEASE:
 			/* If we don't have XKB, we need to use the lame
@@ -745,10 +747,10 @@ x11_compositor_handle_event(int fd, uint32_t mask, void *data)
 				break;
 			}
 			key_release = (xcb_key_press_event_t *) event;
-			wlb_seat_keyboard_key(c->seat,
-					      x11_compositor_get_time(),
-					      key_release->detail - 8,
-					      WL_KEYBOARD_KEY_STATE_RELEASED);
+			wlb_keyboard_key(c->keyboard,
+					 x11_compositor_get_time(),
+					 key_release->detail - 8,
+					 WL_KEYBOARD_KEY_STATE_RELEASED);
 			break;
 		case XCB_BUTTON_PRESS:
 			x11_compositor_deliver_button_event(c, event, 1);
@@ -801,7 +803,7 @@ x11_compositor_handle_event(int fd, uint32_t mask, void *data)
 			if (focus_in->mode == XCB_NOTIFY_MODE_WHILE_GRABBED ||
 			    focus_in->mode == XCB_NOTIFY_MODE_UNGRAB)
 				break;
-			wlb_seat_keyboard_leave(c->seat);
+			wlb_keyboard_leave(c->keyboard);
 			break;
 
 		default:
@@ -831,23 +833,20 @@ x11_compositor_handle_event(int fd, uint32_t mask, void *data)
 			free (event);
 	}
 
-#if 0
 	switch (prev ? prev->response_type & ~0x80 : 0x80) {
 	case XCB_KEY_RELEASE:
 		key_release = (xcb_key_press_event_t *) prev;
 		update_xkb_state_from_core(c, key_release->state);
-		notify_key(&c->core_seat,
-			   weston_compositor_get_time(),
-			   key_release->detail - 8,
-			   WL_KEYBOARD_KEY_STATE_RELEASED,
-			   STATE_UPDATE_AUTOMATIC);
+		/* XXX: Should be STATE_UPDATE_AUTOMATIC */
+		wlb_keyboard_key(c->keyboard, x11_compositor_get_time(),
+				 key_release->detail - 8,
+				 WL_KEYBOARD_KEY_STATE_RELEASED);
 		free(prev);
 		prev = NULL;
 		break;
 	default:
 		break;
 	}
-#endif
 
 	return count;
 }
