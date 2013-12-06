@@ -69,10 +69,15 @@ wlb_output_present_method(struct wlb_output *output);
 WL_EXPORT void
 wlb_output_pixman_composite(struct wlb_output *output, pixman_image_t *image);
 
+WL_EXPORT void
+wlb_surface_add_destroy_listener(struct wlb_surface *surface,
+				 struct wl_listener *listener);
 WL_EXPORT struct wl_resource *
 wlb_surface_buffer(struct wlb_surface *surface);
-WL_EXPORT enum wl_surface_buffer_transform
+WL_EXPORT enum wl_output_transform
 wlb_surface_buffer_transform(struct wlb_surface *surface);
+WL_EXPORT int32_t
+wlb_surface_buffer_scale(struct wlb_surface *surface);
 
 WL_EXPORT struct wlb_seat *
 wlb_seat_create(struct wlb_compositor *compositor);

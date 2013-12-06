@@ -306,3 +306,29 @@ wlb_surface_post_frame_callbacks(struct wlb_surface *surface, uint32_t time)
 	wl_list_for_each_safe(callback, next, &surface->frame_callbacks, link)
 		wlb_callback_notify(callback, time);
 }
+
+WL_EXPORT void
+wlb_surface_add_destroy_listener(struct wlb_surface *surface,
+				 struct wl_listener *listener)
+{
+	wl_resource_add_destroy_listener(surface->resource, listener);
+}
+
+WL_EXPORT struct wl_resource *
+wlb_surface_buffer(struct wlb_surface *surface)
+{
+	return surface->buffer;
+}
+
+WL_EXPORT enum wl_output_transform
+wlb_surface_buffer_transform(struct wlb_surface *surface)
+{
+	return WL_OUTPUT_TRANSFORM_NORMAL;
+}
+
+WL_EXPORT int32_t
+wlb_surface_buffer_scale(struct wlb_surface *surface)
+{
+	return 1;
+}
+
