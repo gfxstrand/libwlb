@@ -130,13 +130,4 @@ wlb_pointer_move_on_output(struct wlb_pointer *pointer, uint32_t time,
 WL_EXPORT void
 wlb_pointer_leave_output(struct wlb_pointer *pointer);
 
-void
-wlb_seat_touch_down(struct wlb_seat, uint32_t id, wl_fixed_t x, wl_fixed_t y);
-void
-wlb_seat_touch_motion(struct wlb_seat, uint32_t id, wl_fixed_t x, wl_fixed_t y);
-void
-wlb_seat_touch_up(struct wlb_seat, uint32_t id);
-void
-wlb_seat_touch_cancel(struct wlb_seat);
-
 #endif /* !defined LIBWLB_LIBWLB_H */
