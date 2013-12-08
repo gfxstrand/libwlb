@@ -85,6 +85,7 @@ struct x11_compositor {
 	struct wlb_seat *seat;
 	struct wlb_pointer *pointer;
 	struct wlb_keyboard *keyboard;
+	struct wlb_gles2_renderer *gles2_renderer;
 
 	struct {
 		xkb_mod_index_t shift_mod;
@@ -851,6 +852,24 @@ x11_compositor_handle_event(int fd, uint32_t mask, void *data)
 	return count;
 }
 
+static void
+init_gl_renderer(struct x11_compositor *c)
+{
+	EGLDisplay display;
+
+	display = eglGetDisplay((EGLNativeDisplayType)c->dpy);
+	if (display == EGL_NO_DISPLAY)
+		return;
+
+	if (eglInitialize(display, NULL, NULL) == EGL_FALSE)
+		return;
+	
+	c->gles2_renderer =
+		wlb_gles2_renderer_create_for_egl(c->compositor, display, NULL);
+	if (!c->gles2_renderer)
+		eglTerminate(display);
+}
+
 struct x11_compositor *
 x11_compositor_create(struct wl_display *display)
 {
@@ -883,6 +902,8 @@ x11_compositor_create(struct wl_display *display)
 
 	x11_compositor_get_resources(c);
 	//x11_compositor_get_wm_info(c);
+
+	init_gl_renderer(c);
 
 	if (x11_input_create(c) < 0)
 		goto err_xdisplay;
@@ -1038,9 +1059,8 @@ x11_output_init_shm(struct x11_compositor *c, struct x11_output *output,
 }
 
 static int
-x11_output_repaint(void *data)
+x11_output_repaint_shm(struct x11_output *output)
 {
-	struct x11_output *output = data;
 	struct wlb_surface *surface;
 	struct wl_resource *buffer;
 	xcb_rectangle_t rect;
@@ -1083,11 +1103,25 @@ x11_output_repaint(void *data)
 		free(err);
 	}
 
+	return 1;
+}
+
+static int
+x11_output_repaint(void *data)
+{
+	struct x11_output *output = data;
+	struct x11_compositor *c = output->compositor;
+
+	if (c->gles2_renderer) {
+		wlb_gles2_renderer_repaint_output(c->gles2_renderer,
+						  output->output);
+	} else {
+		x11_output_repaint_shm(output);
+	}
+
 	wl_event_source_timer_update(output->repaint_timer, 10);
 
 	wlb_output_repaint_complete(output->output, x11_compositor_get_time());
-
-	return 1;
 }
 
 struct x11_output *
@@ -1162,6 +1196,12 @@ x11_output_create(struct x11_compositor *c, int32_t width, int32_t height)
 
 	if (x11_output_init_shm(c, output, width, height) < 0)
 		goto err_output; /* TODO: Clean up X11 stuff */
+	
+	if (c->gles2_renderer) {
+		wlb_gles2_renderer_add_egl_output(c->gles2_renderer,
+						  output->output,
+						  output->window);
+	}
 
 	loop = wl_display_get_event_loop(c->display);
 	output->repaint_timer =

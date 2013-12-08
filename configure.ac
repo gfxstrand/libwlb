@@ -26,6 +26,22 @@ PKG_PROG_PKG_CONFIG()
 
 AC_CHECK_FUNCS([mkostemp posix_fallocate])
 
+AC_ARG_ENABLE(gles2, [  --disable-gles2],,
+              enable_gles2=yes)
+AM_CONDITIONAL(ENABLE_GLES2, test x$enable_gles2 = xyes)
+if test x$enable_gles2 = xyes; then
+	AC_DEFINE([ENABLE_GLES2], [1], [Build libwlb with GLES2 support])
+	PKG_CHECK_MODULES(GLES2, [glesv2])
+fi
+
+AC_ARG_ENABLE(egl, [  --disable-egl],,
+              enable_egl=yes)
+AM_CONDITIONAL(ENABLE_EGL, test x$enable_egl = xyes)
+if test x$enable_egl = xyes; then
+	AC_DEFINE([ENABLE_EGL], [1], [Build libwlb with EGL support])
+	PKG_CHECK_MODULES(EGL, [egl >= 7.10])
+fi
+
 PKG_CHECK_MODULES(WAYLAND, [wayland-server])
 PKG_CHECK_MODULES(PIXMAN, [pixman-1])
 

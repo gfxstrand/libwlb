@@ -25,6 +25,7 @@
 
 #include <wayland-server.h>
 #include <pixman.h>
+#include <EGL/egl.h>
 
 struct wlb_compositor;
 struct wlb_output;
@@ -132,5 +133,21 @@ wlb_pointer_move_on_output(struct wlb_pointer *pointer, uint32_t time,
 			   wl_fixed_t x, wl_fixed_t y);
 WL_EXPORT void
 wlb_pointer_leave_output(struct wlb_pointer *pointer);
+
+struct wlb_gles2_renderer;
+WL_EXPORT struct wlb_gles2_renderer *
+wlb_gles2_renderer_create(struct wlb_compositor *c);
+WL_EXPORT struct wlb_gles2_renderer *
+wlb_gles2_renderer_create_for_egl(struct wlb_compositor *c,
+				  EGLDisplay display, EGLConfig *config);
+WL_EXPORT void
+wlb_gles2_renderer_destroy(struct wlb_gles2_renderer *renderer);
+WL_EXPORT void
+wlb_gles2_renderer_add_egl_output(struct wlb_gles2_renderer *renderer,
+				  struct wlb_output *output,
+				  EGLNativeWindowType window);
+WL_EXPORT void
+wlb_gles2_renderer_repaint_output(struct wlb_gles2_renderer *renderer,
+				  struct wlb_output *output);
 
 #endif /* !defined LIBWLB_LIBWLB_H */

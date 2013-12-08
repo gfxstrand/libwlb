@@ -15,6 +15,11 @@ libwlb_la_SOURCES =			\
 	pixman-renderer.c		\
 	compositor.c
 
+if ENABLE_GLES2
+libwlb_la_SOURCES += glesv2-renderer.c
+libwlb_la_LIBADD += $(EGL_LIBS) $(GLES2_LIBS)
+endif
+
 AM_CPPFLAGS = $(WAYLAND_CFLAGS) $(PIXMAN_CFLAGS)
 AM_CFLAGS = $(GCC_CFLAGS)
 
