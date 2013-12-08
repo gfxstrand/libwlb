@@ -314,6 +314,13 @@ wlb_surface_add_destroy_listener(struct wlb_surface *surface,
 	wl_resource_add_destroy_listener(surface->resource, listener);
 }
 
+WL_EXPORT struct wl_listener *
+wlb_surface_get_destroy_listener(struct wlb_surface *surface,
+				 wl_notify_func_t notify)
+{
+	return wl_resource_get_destroy_listener(surface->resource, notify);
+}
+
 WL_EXPORT struct wl_resource *
 wlb_surface_buffer(struct wlb_surface *surface)
 {
