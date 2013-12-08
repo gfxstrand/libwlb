@@ -5,6 +5,7 @@ AC_INIT([wlbackends], [0.0.1])
 AC_CONFIG_HEADERS([config.h])
 
 AM_INIT_AUTOMAKE([1.11 foreign])
+AM_SILENT_RULES([yes])
 
 # Checks for programs.
 AC_PROG_CC
