@@ -23,6 +23,8 @@
 #include "wlb-private.h"
 
 #include <stdlib.h>
+#include <stdarg.h>
+#include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -114,6 +116,27 @@ wlb_util_create_tmpfile(size_t size)
 #endif
 
 	return fd;
+}
+
+int
+wlb_log(enum wlb_log_level level, const char *format, ...)
+{
+	int nchars;
+	va_list ap;
+
+	va_start(ap, format);
+	switch (level) {
+	case WLB_LOG_LEVEL_ERROR:
+	case WLG_LOG_LEVEL_WARNING:
+		nchars = vfprintf(stderr, format, ap);
+		break;
+	case WLB_LOG_LEVEL_DEBUG:
+	default:
+		nchars = vfprintf(stdout, format, ap);
+	}
+	va_end(ap);
+
+	return nchars;
 }
 
 void *
