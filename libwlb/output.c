@@ -397,6 +397,63 @@ wlb_output_get_matrix(struct wlb_output *output,
 }
 
 void
+wlb_output_transform_matrix(struct wlb_output *output, struct wlb_matrix *mat)
+{
+	float flip;
+
+	switch(output->physical.transform) {
+	case WL_OUTPUT_TRANSFORM_FLIPPED:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_90:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_180:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_270:
+		flip = -1.0f;
+		break;
+	default:
+		flip = 1.0f;
+		break;
+	}
+
+	mat->d[2] = 0;
+	mat->d[5] = 0;
+	mat->d[6] = 0;
+	mat->d[7] = 0;
+	mat->d[8] = 1.0f;
+
+        switch(output->physical.transform) {
+        case WL_OUTPUT_TRANSFORM_NORMAL:
+        case WL_OUTPUT_TRANSFORM_FLIPPED:
+                mat->d[0] = flip;
+                mat->d[1] = 0;
+                mat->d[3] = 0;
+                mat->d[4] = 1;
+                break;
+        case WL_OUTPUT_TRANSFORM_90:
+        case WL_OUTPUT_TRANSFORM_FLIPPED_90:
+                mat->d[0] = 0;
+                mat->d[1] = -flip;
+                mat->d[3] = 1;
+                mat->d[4] = 0;
+                break;
+        case WL_OUTPUT_TRANSFORM_180:
+        case WL_OUTPUT_TRANSFORM_FLIPPED_180:
+                mat->d[0] = -flip;
+                mat->d[1] = 0;
+                mat->d[3] = 0;
+                mat->d[4] = -1;
+                break;
+        case WL_OUTPUT_TRANSFORM_270:
+        case WL_OUTPUT_TRANSFORM_FLIPPED_270:
+                mat->d[0] = 0;
+                mat->d[1] = flip;
+                mat->d[3] = -1;
+                mat->d[4] = 0;
+                break;
+        default:
+                break;
+        }
+}
+
+void
 wlb_output_to_surface_coords(struct wlb_output *output,
 			     wl_fixed_t x, wl_fixed_t y,
 			     wl_fixed_t *sx, wl_fixed_t *sy)
