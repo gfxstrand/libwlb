@@ -7,6 +7,7 @@ libwlb_la_LIBADD = $(WAYLAND_LIBS) $(PIXMAN_LIBS)
 libwlb_la_SOURCES =			\
 	fullscreen-shell-protocol.c	\
 	util.c				\
+	matrix.c				\
 	surface.c			\
 	output.c			\
 	seat.c				\

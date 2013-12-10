@@ -41,6 +41,34 @@ struct wlb_region {
 	pixman_region32_t region;
 };
 
+/*! 3x3 matrix storred column-major
+ *
+ * Indicies are: 
+ * [ 0  3  6 ]
+ * [ 1  4  7 ]
+ * [ 2  5  8 ]
+ */
+struct wlb_matrix {
+	float d[9];
+};
+
+void wlb_matrix_init(struct wlb_matrix *matrix);
+/*! Computes C = AB */
+void
+wlb_matrix_mult(struct wlb_matrix *dest,
+		const struct wlb_matrix *A, const struct wlb_matrix *B);
+void
+wlb_matrix_translate(struct wlb_matrix *dest,
+		     const struct wlb_matrix *src, float dx, float dy);
+void
+wlb_matrix_rotate(struct wlb_matrix *dest,
+		  const struct wlb_matrix *src, float theta);
+void
+wlb_matrix_scale(struct wlb_matrix *dest,
+		 const struct wlb_matrix *src, float sx, float sy);
+void
+wlb_matrix_ortho(struct wlb_matrix *dest, float l, float r, float t, float b);
+
 struct wlb_output_mode {
 	struct wl_list link;
 
