@@ -46,12 +46,14 @@ struct gles2_shader {
 };
 
 struct gles2_surface {
+	struct wlb_surface *surface;
 	struct wl_list link;
 	struct wl_listener destroy_listener;
 
 	int32_t width, height, stride;
+	uint32_t format;
 
-	GLuint tex;
+	GLuint texture;
 };
 
 struct gles2_output {
@@ -65,6 +67,9 @@ struct gles2_output {
 struct wlb_gles2_renderer {
 	struct wl_list surface_list;
 	struct wl_list output_list;
+
+	struct wlb_matrix output_mat;
+	struct wl_array vertices;
 
 	GLuint vertex_shader;
 	struct gles2_shader *solid_shader;
@@ -99,10 +104,7 @@ static const GLchar *argb8888_shader_source =
 "varying mediump vec2 vo_tex_coord;\n"
 "\n"
 "void main() {\n"
-"	gl_FragColor = vec4(1, 0, 0, 1);\n"
-/*
-"	gl_FragColor = vecr4(texture2D(fu_texture, vo_tex_coord.xy).bgr, 1);\n"
-*/
+"	gl_FragColor = vec4(texture2D(fu_texture, vo_tex_coord).bgr, 1);\n"
 "}\n";
 
 static const GLchar *xrgb8888_shader_source =
@@ -110,8 +112,7 @@ static const GLchar *xrgb8888_shader_source =
 "varying mediump vec2 vo_tex_coord;\n"
 "\n"
 "void main() {\n"
-"	gl_FragColor = vec4(1, 0, 0, 1);\n"
-/* "	gl_FragColor = texture2D(fu_texture, vo_tex_coord.xy).bgra;\n" */
+"	gl_FragColor = texture2D(fu_texture, vo_tex_coord).bgra;\n"
 "}\n";
 
 static GLuint
@@ -278,7 +279,7 @@ gles2_shader_get_solid(struct wlb_gles2_renderer *r)
 static void
 gles2_surface_destroy(struct gles2_surface *surface)
 {
-	glDeleteTextures(1, &surface->tex);
+	glDeleteTextures(1, &surface->texture);
 
 	wl_list_remove(&surface->link);
 	wl_list_remove(&surface->destroy_listener.link);
@@ -312,6 +313,7 @@ gles2_surface_get(struct wlb_gles2_renderer *gr, struct wlb_surface *surface)
 	if (!gs)
 		return NULL;
 	
+	gs->surface = surface;
 	gs->destroy_listener.notify = surface_destroy_handler;
 	wlb_surface_add_destroy_listener(surface, &gs->destroy_listener);
 	wl_list_insert(&gr->surface_list, &gs->link);
@@ -320,32 +322,26 @@ gles2_surface_get(struct wlb_gles2_renderer *gr, struct wlb_surface *surface)
 }
 
 static void
-gles2_surface_flush_damage(struct gles2_surface *gs, struct wlb_surface *ws)
+gles2_surface_flush_damage(struct gles2_surface *gs)
 {
 	struct wl_resource *buffer;
 	struct wl_shm_buffer *shm_buffer;
 	pixman_region32_t damage;
 
 	pixman_region32_init(&damage);
-	wlb_surface_get_damage(ws, &damage);
-	
-	if (!pixman_region32_not_empty(&damage)) {
-		pixman_region32_fini(&damage);
-		return;
-	}
 
-	buffer = wlb_surface_buffer(ws);
+	buffer = wlb_surface_buffer(gs->surface);
 
 	if (!buffer) {
-		if (gs->tex)
-			glDeleteTextures(1, &gs->tex);
-		gs->tex = 0;
+		if (gs->texture)
+			glDeleteTextures(1, &gs->texture);
+		gs->texture = 0;
 		return;
 	}
 
 	/* Make sure we have a texture */
-	if (!gs->tex)
-		glGenTextures(1, &gs->tex);
+	if (!gs->texture)
+		glGenTextures(1, &gs->texture);
 
 	shm_buffer = wl_shm_buffer_get(buffer);
 
@@ -353,9 +349,16 @@ gles2_surface_flush_damage(struct gles2_surface *gs, struct wlb_surface *ws)
 
 	gs->width = wl_shm_buffer_get_width(shm_buffer);
 	gs->height = wl_shm_buffer_get_height(shm_buffer);
-	gs->stride = wl_shm_buffer_get_stride(shm_buffer);
+	gs->stride = wl_shm_buffer_get_stride(shm_buffer) / 4;
+	gs->format = wl_shm_buffer_get_format(shm_buffer);
 
-	glBindTexture(GL_TEXTURE_2D, gs->tex);
+	glBindTexture(GL_TEXTURE_2D, gs->texture);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, gs->stride, gs->height, 0,
 		     GL_RGBA, GL_UNSIGNED_BYTE,
 		     wl_shm_buffer_get_data(shm_buffer));
@@ -586,12 +589,93 @@ wlb_gles2_renderer_add_egl_output(struct wlb_gles2_renderer *gr,
 		egl_error("Failed to create EGL surface");
 }
 
+static void
+make_triangles_from_region(struct wl_array *array, pixman_region32_t *region)
+{
+	pixman_box32_t *rects;
+	int i, nrects;
+	GLfloat *verts;
+
+	rects = pixman_region32_rectangles(region, &nrects);
+
+	for (i = 0; i < nrects; ++i) {
+		verts = wl_array_add(array, 12 * sizeof(GLfloat));
+
+		verts[ 0] = rects[i].x1; verts[ 1] = rects[i].y1;
+		verts[ 2] = rects[i].x2; verts[ 3] = rects[i].y1;
+		verts[ 4] = rects[i].x2; verts[ 5] = rects[i].y2;
+		verts[ 6] = rects[i].x2; verts[ 7] = rects[i].y2;
+		verts[ 8] = rects[i].x1; verts[ 9] = rects[i].y2;
+		verts[10] = rects[i].x1; verts[11] = rects[i].y1;
+	}
+}
+
+static void
+paint_surface(struct wlb_gles2_renderer *gr, struct wlb_output *output)
+{
+	struct wlb_matrix buffer_mat;
+	struct wlb_surface *surface;
+	struct gles2_surface *gs;
+	pixman_region32_t damage;
+
+	struct gles2_shader *shader;
+
+	surface = wlb_output_surface(output);
+	gs = gles2_surface_get(gr, surface);
+	if (!gs)
+		return;
+	gles2_surface_flush_damage(gs);
+
+	shader = gles2_shader_get_for_format(gr, gs->format);
+	if (!shader)
+		return;
+
+	/* XXX */
+	glUniform4f(shader->fu_color, 1, 0, 0, 1);
+
+	glUseProgram(shader->program);
+	glUniformMatrix3fv(shader->vu_output_tf, 1, GL_FALSE, gr->output_mat.d);
+
+	wlb_matrix_init(&buffer_mat);
+	if (gs->stride != gs->width)
+		wlb_matrix_scale(&buffer_mat, &buffer_mat,
+				 gs->width / (float)gs->stride, 1);
+	wlb_matrix_scale(&buffer_mat, &buffer_mat,
+			 1 / (float)output->surface.position.width,
+			 1 / (float)output->surface.position.height);
+	wlb_matrix_translate(&buffer_mat, &buffer_mat,
+			     -output->surface.position.x,
+			     -output->surface.position.y);
+	glUniformMatrix3fv(shader->vu_buffer_tf, 1, GL_FALSE, buffer_mat.d);
+
+	glUniform1i(shader->fu_texture, 0);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, gs->texture);
+	
+	pixman_region32_init_rect(&damage,
+				  output->surface.position.x,
+				  output->surface.position.y,
+				  output->surface.position.width,
+				  output->surface.position.height);
+	
+	gr->vertices.size = 0;
+	make_triangles_from_region(&gr->vertices, &damage);
+	pixman_region32_fini(&damage);
+
+	glVertexAttribPointer(shader->va_vertex, 2, GL_FLOAT, GL_FALSE, 0,
+			      gr->vertices.data);
+	glEnableVertexAttribArray(shader->va_vertex);
+	glDrawArrays(GL_TRIANGLES, 0, gr->vertices.size / (sizeof(GLfloat)*2));
+	glDisableVertexAttribArray(shader->va_vertex);
+}
+
 WL_EXPORT void
 wlb_gles2_renderer_repaint_output(struct wlb_gles2_renderer *gr,
 				  struct wlb_output *output)
 {
-	struct gles2_shader *shader;
 	struct gles2_output *go;
+
+	assert(output->current_mode);
 
 	go = gles2_output_get(gr, output);
 
@@ -603,38 +687,18 @@ wlb_gles2_renderer_repaint_output(struct wlb_gles2_renderer *gr,
 		}
 	}
 
-	shader = gles2_shader_get_solid(gr);
-	if (!shader)
-		return;
-
 	glViewport(0, 0,
 		   output->current_mode->width,
 		   output->current_mode->height);
+
+	wlb_matrix_ortho(&gr->output_mat, 0, output->current_mode->width,
+			 0, output->current_mode->height);
 	
 	glClearColor(0, 0, 0, 1);
 	glClear(GL_COLOR_BUFFER_BIT);
-	
-	static const GLfloat matrix[] = {
-		1, 0, 0,
-		0, 1, 0,
-		0, 0, 1,
-	};
 
-	glUseProgram(shader->program);
-
-	glUniformMatrix3fv(shader->vu_output_tf, 1, GL_FALSE, matrix);
-	glUniform4f(shader->fu_color, 1, 0, 0, 1);
-
-	static const GLfloat verts[] = {
-		0.0f, 0.7f,
-		0.5f, -0.5f,
-		-0.5f, -0.5f
-	};
-
-	glVertexAttribPointer(shader->va_vertex, 2, GL_FLOAT, GL_FALSE, 0, verts);
-	glEnableVertexAttribArray(shader->va_vertex);
-	glDrawArrays(GL_TRIANGLES, 0, 3);
-	glDisableVertexAttribArray(shader->va_vertex);
+	if (wlb_output_surface(output))
+		paint_surface(gr, output);
 
 	if (go && go->egl_surface != EGL_NO_SURFACE) {
 		eglSwapBuffers(gr->egl_display, go->egl_surface);
