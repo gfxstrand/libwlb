@@ -311,6 +311,10 @@ wlb_output_recompute_surface_position(struct wlb_output *output)
 
 	sw = output->surface.surface->width;
 	sh = output->surface.surface->height;
+
+	if (sw == 0 || sh == 0)
+		return;
+
 	ow = output->current_mode->width;
 	oh = output->current_mode->height;
 
