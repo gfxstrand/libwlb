@@ -81,6 +81,9 @@ WL_EXPORT void
 wlb_output_repaint_complete(struct wlb_output *output, uint32_t time);
 WL_EXPORT struct wlb_surface *
 wlb_output_surface(struct wlb_output *output);
+WL_EXPORT void
+wlb_output_surface_position(struct wlb_output *output, int32_t *x, int32_t *y,
+			    uint32_t *width, uint32_t *height);
 WL_EXPORT uint32_t
 wlb_output_present_method(struct wlb_output *output);
 WL_EXPORT void

@@ -272,6 +272,20 @@ wlb_output_surface(struct wlb_output *output)
 	return output->surface.surface;
 }
 
+WL_EXPORT void
+wlb_output_surface_position(struct wlb_output *output, int32_t *x, int32_t *y,
+			    uint32_t *width, uint32_t *height)
+{
+	if (x)
+		*x = output->surface.position.x;
+	if (y)
+		*y = output->surface.position.y;
+	if (width)
+		*width = output->surface.position.width;
+	if (height)
+		*height = output->surface.position.height;
+}
+
 WL_EXPORT uint32_t
 wlb_output_present_method(struct wlb_output *output)
 {

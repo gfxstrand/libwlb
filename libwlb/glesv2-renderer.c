@@ -617,6 +617,8 @@ paint_surface(struct wlb_gles2_renderer *gr, struct wlb_output *output)
 	struct wlb_surface *surface;
 	struct gles2_surface *gs;
 	pixman_region32_t damage;
+	int32_t sx, sy;
+	uint32_t swidth, sheight;
 
 	struct gles2_shader *shader;
 
@@ -630,33 +632,25 @@ paint_surface(struct wlb_gles2_renderer *gr, struct wlb_output *output)
 	if (!shader)
 		return;
 
-	/* XXX */
-	glUniform4f(shader->fu_color, 1, 0, 0, 1);
-
 	glUseProgram(shader->program);
 	glUniformMatrix3fv(shader->vu_output_tf, 1, GL_FALSE, gr->output_mat.d);
+
+	wlb_output_surface_position(output, &sx, &sy, &swidth, &sheight);
 
 	wlb_matrix_init(&buffer_mat);
 	if (gs->stride != gs->width)
 		wlb_matrix_scale(&buffer_mat, &buffer_mat,
 				 gs->width / (float)gs->stride, 1);
 	wlb_matrix_scale(&buffer_mat, &buffer_mat,
-			 1 / (float)output->surface.position.width,
-			 1 / (float)output->surface.position.height);
-	wlb_matrix_translate(&buffer_mat, &buffer_mat,
-			     -output->surface.position.x,
-			     -output->surface.position.y);
+			 1 / (float)swidth, 1 / (float)sheight);
+	wlb_matrix_translate(&buffer_mat, &buffer_mat, -sx, -sy);
 	glUniformMatrix3fv(shader->vu_buffer_tf, 1, GL_FALSE, buffer_mat.d);
 
 	glUniform1i(shader->fu_texture, 0);
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, gs->texture);
 	
-	pixman_region32_init_rect(&damage,
-				  output->surface.position.x,
-				  output->surface.position.y,
-				  output->surface.position.width,
-				  output->surface.position.height);
+	pixman_region32_init_rect(&damage, sx, sy, swidth, sheight);
 	
 	gr->vertices.size = 0;
 	make_triangles_from_region(&gr->vertices, &damage);
