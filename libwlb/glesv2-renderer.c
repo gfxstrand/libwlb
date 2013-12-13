@@ -27,9 +27,12 @@
 #include <stdio.h>
 #include <assert.h>
 #include <errno.h>
+#include <string.h>
 
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
+#include <GLES2/gl2ext.h>
+#include "weston-egl-ext.h"
 
 struct gles2_shader {
 	struct wl_list link;
@@ -50,7 +53,7 @@ struct gles2_surface {
 	struct wl_list link;
 	struct wl_listener destroy_listener;
 
-	int32_t width, height, stride;
+	int32_t width, height, pitch;
 	uint32_t format;
 
 	GLuint texture;
@@ -78,6 +81,10 @@ struct wlb_gles2_renderer {
 	EGLDisplay egl_display;
 	EGLConfig egl_config;
 	EGLContext egl_context;
+
+	int initialized;
+
+	int has_unpack_subimage;
 };
 
 static const GLchar *vertex_shader_source =
@@ -322,13 +329,21 @@ gles2_surface_get(struct wlb_gles2_renderer *gr, struct wlb_surface *surface)
 }
 
 static void
-gles2_surface_flush_damage(struct gles2_surface *gs)
+gles2_surface_flush_damage(struct wlb_gles2_renderer *gr,
+			   struct gles2_surface *gs)
 {
 	struct wl_resource *buffer;
 	struct wl_shm_buffer *shm_buffer;
 	pixman_region32_t damage;
+	pixman_box32_t *rects;
+	int i, nrects, needs_full_upload = 0;
+	int32_t width, height;
 
 	pixman_region32_init(&damage);
+	wlb_surface_get_damage(gs->surface, &damage);
+
+	if (!pixman_region32_not_empty(&damage))
+		return;
 
 	buffer = wlb_surface_buffer(gs->surface);
 
@@ -340,28 +355,64 @@ gles2_surface_flush_damage(struct gles2_surface *gs)
 	}
 
 	/* Make sure we have a texture */
-	if (!gs->texture)
+	if (!gs->texture) {
 		glGenTextures(1, &gs->texture);
+
+		glBindTexture(GL_TEXTURE_2D, gs->texture);
+		glTexParameteri(GL_TEXTURE_2D,
+				GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D,
+				GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D,
+				GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D,
+				GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+
+		needs_full_upload = 1;
+	}
 
 	shm_buffer = wl_shm_buffer_get(buffer);
 
 	assert(shm_buffer);
 
-	gs->width = wl_shm_buffer_get_width(shm_buffer);
-	gs->height = wl_shm_buffer_get_height(shm_buffer);
-	gs->stride = wl_shm_buffer_get_stride(shm_buffer) / 4;
+	width = wl_shm_buffer_get_width(shm_buffer);
+	height = wl_shm_buffer_get_height(shm_buffer);
+	gs->pitch = wl_shm_buffer_get_stride(shm_buffer) / 4;
 	gs->format = wl_shm_buffer_get_format(shm_buffer);
 
-	glBindTexture(GL_TEXTURE_2D, gs->texture);
+	if (width != gs->width || height != gs->height) {
+		gs->width = width;
+		gs->height = height;
+		needs_full_upload = 1;
+	}
 
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	wlb_surface_reset_damage(gs->surface);
 
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, gs->stride, gs->height, 0,
-		     GL_RGBA, GL_UNSIGNED_BYTE,
-		     wl_shm_buffer_get_data(shm_buffer));
+	void *pixel_data = wl_shm_buffer_get_data(shm_buffer);
+
+#ifdef GL_EXT_unpack_subimage
+	glPixelStorei(GL_UNPACK_ROW_LENGTH_EXT, gs->pitch);
+
+	if (gr->has_unpack_subimage && !needs_full_upload) {
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, gs->width, gs->height,
+			     0, GL_RGBA, GL_UNSIGNED_BYTE, pixel_data);
+		return;
+	} else if (gr->has_unpack_subimage) {
+		rects = pixman_region32_rectangles(&damage, &nrects);
+		for (i = 0; i < nrects; ++i) {
+			glPixelStorei(GL_UNPACK_SKIP_PIXELS_EXT, rects[i].x1);
+			glPixelStorei(GL_UNPACK_SKIP_ROWS_EXT, rects[i].y1);
+			glTexSubImage2D(GL_TEXTURE_2D, 0, rects[i].x1,
+					rects[i].y1, rects[i].x2 - rects[i].x1,
+					rects[i].y2 - rects[i].y1,
+					GL_RGBA, GL_UNSIGNED_BYTE, pixel_data);
+		}
+		return;
+	}
+#endif
+
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, gs->pitch, gs->height, 0,
+		     GL_RGBA, GL_UNSIGNED_BYTE, pixel_data);
 }
 
 static void
@@ -590,6 +641,25 @@ wlb_gles2_renderer_add_egl_output(struct wlb_gles2_renderer *gr,
 }
 
 static void
+wlb_gles2_renderer_initialize(struct wlb_gles2_renderer *gr)
+{
+	const char *extensions;
+
+	if (gr->initialized)
+		return;
+	
+	extensions = (const char *) glGetString(GL_EXTENSIONS);
+	wlb_debug("Available GLES 2.0 Extensions:\n%s\n", extensions);
+
+#ifdef GL_EXT_unpack_subimage
+	if (strstr(extensions, "GL_EXT_unpack_subimage"))
+		gr->has_unpack_subimage = 1;
+#endif
+
+	gr->initialized = 1;
+}
+
+static void
 make_triangles_from_region(struct wl_array *array, pixman_region32_t *region)
 {
 	pixman_box32_t *rects;
@@ -626,7 +696,7 @@ paint_surface(struct wlb_gles2_renderer *gr, struct wlb_output *output)
 	gs = gles2_surface_get(gr, surface);
 	if (!gs)
 		return;
-	gles2_surface_flush_damage(gs);
+	gles2_surface_flush_damage(gr, gs);
 
 	shader = gles2_shader_get_for_format(gr, gs->format);
 	if (!shader)
@@ -638,9 +708,9 @@ paint_surface(struct wlb_gles2_renderer *gr, struct wlb_output *output)
 	wlb_output_surface_position(output, &sx, &sy, &swidth, &sheight);
 
 	wlb_matrix_init(&buffer_mat);
-	if (gs->stride != gs->width)
+	if (gs->pitch != gs->width)
 		wlb_matrix_scale(&buffer_mat, &buffer_mat,
-				 gs->width / (float)gs->stride, 1);
+				 gs->width / (float)gs->pitch, 1);
 	wlb_matrix_scale(&buffer_mat, &buffer_mat,
 			 1 / (float)swidth, 1 / (float)sheight);
 	wlb_matrix_translate(&buffer_mat, &buffer_mat, -sx, -sy);
@@ -680,6 +750,8 @@ wlb_gles2_renderer_repaint_output(struct wlb_gles2_renderer *gr,
 			return;
 		}
 	}
+
+	wlb_gles2_renderer_initialize(gr);
 
 	glViewport(0, 0,
 		   output->current_mode->width,

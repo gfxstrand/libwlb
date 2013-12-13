@@ -95,6 +95,10 @@ wlb_surface_add_destroy_listener(struct wlb_surface *surface,
 WL_EXPORT struct wl_listener *
 wlb_surface_get_destroy_listener(struct wlb_surface *surface,
 				 wl_notify_func_t notify);
+WL_EXPORT void
+wlb_surface_get_damage(struct wlb_surface *surface, pixman_region32_t *damage);
+WL_EXPORT void
+wlb_surface_reset_damage(struct wlb_surface *surface);
 WL_EXPORT struct wl_resource *
 wlb_surface_buffer(struct wlb_surface *surface);
 WL_EXPORT enum wl_output_transform

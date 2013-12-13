@@ -188,6 +188,8 @@ surface_commit(struct wl_client *client, struct wl_resource *resource)
 	
 	pixman_region32_union(&surface->damage, &surface->damage, 
 			      &surface->pending.damage);
+	pixman_region32_fini(&surface->pending.damage);
+	pixman_region32_init(&surface->pending.damage);
 	pixman_region32_copy(&surface->input_region,
 			     &surface->pending.input_region);
 	wl_list_insert_list(&surface->frame_callbacks,
@@ -319,6 +321,19 @@ wlb_surface_get_destroy_listener(struct wlb_surface *surface,
 				 wl_notify_func_t notify)
 {
 	return wl_resource_get_destroy_listener(surface->resource, notify);
+}
+
+WL_EXPORT void
+wlb_surface_get_damage(struct wlb_surface *surface, pixman_region32_t *damage)
+{
+	pixman_region32_copy(damage, &surface->damage);
+}
+
+WL_EXPORT void
+wlb_surface_reset_damage(struct wlb_surface *surface)
+{
+	pixman_region32_fini(&surface->damage);
+	pixman_region32_init(&surface->damage);
 }
 
 WL_EXPORT struct wl_resource *
