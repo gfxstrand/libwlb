@@ -77,10 +77,18 @@ struct wlb_output_mode {
 	int32_t refresh;
 };
 
+#define WLB_HAS_FUNC(O, F) ((O)->funcs && ((char *)(&(O)->funcs->F + 1) <= \
+	((char *)(O)->funcs) + (O)->funcs_size) && (O)->funcs->F)
+#define WLB_CALL_FUNC(O, F, ...) (O)->funcs->F((O), (O)->funcs_data, __VA_ARGS__)
+
 struct wlb_output {
 	struct wlb_compositor *compositor;
 	struct wl_list compositor_link;
 	struct wl_signal destroy_signal;
+
+	struct wlb_output_funcs *funcs;
+	void *funcs_data;
+	uint32_t funcs_size;
 
 	struct wl_global *global;
 	struct wl_list resource_list;
@@ -105,6 +113,7 @@ struct wlb_output {
 		struct wlb_surface *surface;
 		struct wl_list link;
 		enum wl_fullscreen_shell_present_method present_method;
+		uint32_t present_refresh;
 
 		pixman_rectangle32_t position;
 	} surface;

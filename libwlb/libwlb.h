@@ -44,6 +44,22 @@ wlb_output_create(struct wlb_compositor *compositor, int32_t width,
 		  int32_t height, const char *make, const char *model);
 WL_EXPORT void
 wlb_output_destroy(struct wlb_output *output);
+struct wlb_output_funcs {
+	int (*switch_mode)(struct wlb_output *output, void *data,
+			   int32_t width, int32_t height, int32_t refresh);
+	int (*place_surface)(struct wlb_output *output, void *data,
+			     struct wlb_surface *surface,
+			     uint32_t present_method, int32_t *x, int32_t *y,
+			     uint32_t *width, uint32_t *height);
+};
+WL_EXPORT void
+wlb_output_set_funcs_with_size(struct wlb_output *output,
+			       struct wlb_output_funcs *funcs, size_t size);
+static inline void
+wlb_output_set_funcs(struct wlb_output *output, struct wlb_output_funcs *funcs)
+{
+	wlb_output_set_funcs_with_size(output, funcs, sizeof *funcs);
+}
 WL_EXPORT void
 wlb_output_set_transform(struct wlb_output *output,
 			 enum wl_output_transform transform);

@@ -291,6 +291,7 @@ wlb_output_present_surface(struct wlb_output *output,
 
 	output->surface.surface = surface;
 	output->surface.present_method = method;
+	output->surface.present_refresh = framerate;
 
 	if (surface) {
 		wlb_output_recompute_surface_position(output);
@@ -303,17 +304,24 @@ void
 wlb_output_recompute_surface_position(struct wlb_output *output)
 {
 	int32_t ow, oh, sw, sh;
+	pixman_rectangle32_t fpos;
 
 	assert(output->current_mode);
 	assert(output->surface.surface);
-	assert(output->surface.surface->width >= 0);
-	assert(output->surface.surface->height >= 0);
 
 	sw = output->surface.surface->width;
 	sh = output->surface.surface->height;
 
-	if (sw == 0 || sh == 0)
+	if (sw <= 0 || sh <= 0)
 		return;
+	
+	if (WLB_HAS_FUNC(output, place_surface) &&
+	    WLB_CALL_FUNC(output, place_surface, output->surface.surface,
+			  output->surface.present_method,
+			  &fpos.x, &fpos.y, &fpos.width, &fpos.height) > 0) {
+		output->surface.position = fpos;
+		return;
+	}
 
 	ow = output->current_mode->width;
 	oh = output->current_mode->height;
@@ -338,8 +346,17 @@ wlb_output_recompute_surface_position(struct wlb_output *output)
 
 		break;
 	default:
-	case WL_FULLSCREEN_SHELL_PRESENT_METHOD_FILL:
 	case WL_FULLSCREEN_SHELL_PRESENT_METHOD_DRIVER:
+		if (WLB_HAS_FUNC(output, switch_mode) &&
+		    WLB_CALL_FUNC(output, switch_mode, sw, sh,
+				  output->surface.present_refresh)) {
+			output->surface.position.x = 0;
+			output->surface.position.y = 0;
+			output->surface.position.width = sw;
+			output->surface.position.height = sh;
+			break;
+		}
+	case WL_FULLSCREEN_SHELL_PRESENT_METHOD_FILL:
 		output->surface.position.x = (ow - sw) / 2;
 		output->surface.position.y = (oh - sh) / 2;
 		output->surface.position.width = sw;
