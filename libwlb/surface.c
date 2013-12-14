@@ -323,10 +323,36 @@ wlb_surface_get_destroy_listener(struct wlb_surface *surface,
 	return wl_resource_get_destroy_listener(surface->resource, notify);
 }
 
-WL_EXPORT void
-wlb_surface_get_damage(struct wlb_surface *surface, pixman_region32_t *damage)
+WL_EXPORT struct wlb_rectangle *
+wlb_surface_get_buffer_damage(struct wlb_surface *surface, int *nrects)
 {
-	pixman_region32_copy(damage, &surface->damage);
+	struct wlb_rectangle *rects;
+	pixman_box32_t *drects;
+	int dnrects, i;
+
+	if (!pixman_region32_not_empty(&surface->damage)) {
+		if (nrects)
+			*nrects = 0;
+		return NULL;
+	}
+
+	drects = pixman_region32_rectangles(&surface->damage, &dnrects);
+
+	if (nrects)
+		*nrects = dnrects;
+
+	rects = malloc(dnrects * sizeof(*rects));
+	if (!rects)
+		return NULL;
+
+	memcpy(rects, drects, dnrects * sizeof(*rects));
+
+	for (i = 0; i < dnrects; ++i) {
+		rects[i].width -= rects[i].x;
+		rects[i].height -= rects[i].y;
+	}
+
+	return rects;
 }
 
 WL_EXPORT void

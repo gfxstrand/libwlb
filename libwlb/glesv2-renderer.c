@@ -334,16 +334,9 @@ gles2_surface_flush_damage(struct wlb_gles2_renderer *gr,
 {
 	struct wl_resource *buffer;
 	struct wl_shm_buffer *shm_buffer;
-	pixman_region32_t damage;
-	pixman_box32_t *rects;
-	int i, nrects, needs_full_upload = 0;
+	struct wlb_rectangle *drects;
+	int i, ndrects, needs_full_upload = 0;
 	int32_t width, height;
-
-	pixman_region32_init(&damage);
-	wlb_surface_get_damage(gs->surface, &damage);
-
-	if (!pixman_region32_not_empty(&damage))
-		return;
 
 	buffer = wlb_surface_buffer(gs->surface);
 
@@ -351,8 +344,18 @@ gles2_surface_flush_damage(struct wlb_gles2_renderer *gr,
 		if (gs->texture)
 			glDeleteTextures(1, &gs->texture);
 		gs->texture = 0;
-		return;
+		goto done;
 	}
+
+	drects = wlb_surface_get_buffer_damage(gs->surface, &ndrects);
+
+	if (ndrects == 0)
+		return;
+
+	if (!drects)
+		/* Failed to get damage, but we can still try and upload
+		 * the entire thing */
+		needs_full_upload = 1;
 
 	/* Make sure we have a texture */
 	if (!gs->texture) {
@@ -396,23 +399,26 @@ gles2_surface_flush_damage(struct wlb_gles2_renderer *gr,
 	if (gr->has_unpack_subimage && !needs_full_upload) {
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, gs->width, gs->height,
 			     0, GL_RGBA, GL_UNSIGNED_BYTE, pixel_data);
-		return;
+		goto done;
 	} else if (gr->has_unpack_subimage) {
-		rects = pixman_region32_rectangles(&damage, &nrects);
-		for (i = 0; i < nrects; ++i) {
-			glPixelStorei(GL_UNPACK_SKIP_PIXELS_EXT, rects[i].x1);
-			glPixelStorei(GL_UNPACK_SKIP_ROWS_EXT, rects[i].y1);
-			glTexSubImage2D(GL_TEXTURE_2D, 0, rects[i].x1,
-					rects[i].y1, rects[i].x2 - rects[i].x1,
-					rects[i].y2 - rects[i].y1,
+		for (i = 0; i < ndrects; ++i) {
+			glPixelStorei(GL_UNPACK_SKIP_PIXELS_EXT, drects[i].x);
+			glPixelStorei(GL_UNPACK_SKIP_ROWS_EXT, drects[i].y);
+			glTexSubImage2D(GL_TEXTURE_2D, 0,
+					drects[i].x, drects[i].y,
+					drects[i].width, drects[i].height,
 					GL_RGBA, GL_UNSIGNED_BYTE, pixel_data);
 		}
-		return;
+		goto done;
 	}
 #endif
 
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, gs->pitch, gs->height, 0,
 		     GL_RGBA, GL_UNSIGNED_BYTE, pixel_data);
+
+done:
+	free(drects);
+	return;
 }
 
 static void

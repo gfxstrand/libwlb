@@ -34,6 +34,11 @@ struct wlb_seat;
 struct wlb_keyboard;
 struct wlb_pointer;
 
+struct wlb_rectangle {
+	int32_t x, y;
+	uint32_t width, height;
+};
+
 WL_EXPORT struct wlb_compositor *
 wlb_compositor_create(struct wl_display *display);
 void
@@ -95,8 +100,8 @@ wlb_surface_add_destroy_listener(struct wlb_surface *surface,
 WL_EXPORT struct wl_listener *
 wlb_surface_get_destroy_listener(struct wlb_surface *surface,
 				 wl_notify_func_t notify);
-WL_EXPORT void
-wlb_surface_get_damage(struct wlb_surface *surface, pixman_region32_t *damage);
+WL_EXPORT struct wlb_rectangle *
+wlb_surface_get_buffer_damage(struct wlb_surface *surface, int *nrects);
 WL_EXPORT void
 wlb_surface_reset_damage(struct wlb_surface *surface);
 WL_EXPORT struct wl_resource *
