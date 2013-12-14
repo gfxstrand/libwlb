@@ -27,9 +27,10 @@ static void
 compositor_create_surface(struct wl_client *client,
 			  struct wl_resource *resource, uint32_t id)
 {
+	struct wlb_compositor *compositor = wl_resource_get_user_data(resource);
 	struct wlb_surface *surface;
 
-	surface = wlb_surface_create(client, id);
+	surface = wlb_surface_create(compositor, client, id);
 	if (!surface)
 		wl_client_post_no_memory(client);
 }

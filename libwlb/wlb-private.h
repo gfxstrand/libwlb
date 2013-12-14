@@ -147,6 +147,7 @@ struct wlb_callback {
 };
 
 struct wlb_surface {
+	struct wlb_compositor *compositor;
 	struct wl_resource *resource;
 
 	struct wl_list output_list;
@@ -173,7 +174,8 @@ struct wlb_surface {
 };
 
 struct wlb_surface *
-wlb_surface_create(struct wl_client *client, uint32_t id);
+wlb_surface_create(struct wlb_compositor *compositor,
+		   struct wl_client *client, uint32_t id);
 void
 wlb_surface_destroy(struct wlb_surface *surface);
 void

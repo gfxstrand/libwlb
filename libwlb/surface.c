@@ -245,14 +245,17 @@ wlb_surface_destroy(struct wlb_surface *surface)
 }
 
 struct wlb_surface *
-wlb_surface_create(struct wl_client *client, uint32_t id)
+wlb_surface_create(struct wlb_compositor *compositor,
+		   struct wl_client *client, uint32_t id)
 {
 	struct wlb_surface *surface;
 
 	surface = zalloc(sizeof *surface);
 	if (!surface)
 		return NULL;
-	
+
+	surface->compositor = compositor;
+
 	surface->resource =
 		wl_resource_create(client, &wl_surface_interface, 1, id);
 	if (!surface->resource) {
