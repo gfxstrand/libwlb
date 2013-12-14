@@ -22,6 +22,7 @@
 #include "wlb-private.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 static void
 callback_resource_destroyed(struct wl_resource *resource)
@@ -154,8 +155,7 @@ static void
 surface_commit(struct wl_client *client, struct wl_resource *resource)
 {
 	struct wlb_surface *surface = wl_resource_get_user_data(resource);
-	struct wl_shm_buffer *shm_buffer;
-	int32_t old_width, old_height;
+	int32_t bwidth, bheight;
 	struct wlb_output *output;
 
 	if (surface->buffer) {
@@ -169,15 +169,18 @@ surface_commit(struct wl_client *client, struct wl_resource *resource)
 	if (!surface->buffer) {
 		surface->width = 0;
 		surface->height = 0;
-	} else if (shm_buffer = wl_shm_buffer_get(surface->buffer)) {
-		old_width = surface->width;
-		old_height = surface->height;
-		surface->width = wl_shm_buffer_get_width(shm_buffer);
-		surface->height = wl_shm_buffer_get_height(shm_buffer);
-		if (old_width != surface->width || old_height != surface->height)
+	} else if (wlb_compositor_get_buffer_size(surface->compositor,
+						  surface->buffer,
+						  &bwidth, &bheight) > 0) {
+		if (surface->width != bwidth || surface->height != bheight) {
+			surface->width = bwidth;
+			surface->height = bheight;
+
 			wl_list_for_each(output, &surface->output_list, surface.link)
 				wlb_output_recompute_surface_position(output);
+		}
 	} else {
+		wlb_warn("Unknown buffer type");
 		surface->width = -1;
 		surface->height = -1;
 	}

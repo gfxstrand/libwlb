@@ -39,10 +39,21 @@ struct wlb_rectangle {
 	uint32_t width, height;
 };
 
+/* Determines the size of a buffer
+ *
+ * Must return 0 if it does not recognize the buffer and a positive integer
+ * if it does and the size has been set.
+ */
+typedef int (*wlb_buffer_size_func_t)(void *data, struct wl_resource *buffer,
+				      int32_t *width, int32_t *height);
+
 WL_EXPORT struct wlb_compositor *
 wlb_compositor_create(struct wl_display *display);
-void
+WL_EXPORT void
 wlb_compositor_destroy(struct wlb_compositor *compositor);
+WL_EXPORT int
+wlb_compositor_add_buffer_type(struct wlb_compositor *compositor,
+			       wlb_buffer_size_func_t func, void *data);
 
 WL_EXPORT struct wlb_output *
 wlb_output_create(struct wlb_compositor *compositor, int32_t width,

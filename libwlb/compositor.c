@@ -170,6 +170,22 @@ fullscreen_shell_bind(struct wl_client *client,
 				       comp, NULL);
 }
 
+static int
+shm_buffer_size_func(void *data, struct wl_resource *buffer,
+		     int32_t *width, int32_t *height)
+{
+	struct wl_shm_buffer *shm_buffer;
+
+	shm_buffer = wl_shm_buffer_get(buffer);
+	if (!shm_buffer)
+		return 0;
+
+	*width = wl_shm_buffer_get_width(shm_buffer);
+	*height = wl_shm_buffer_get_height(shm_buffer);
+
+	return 1;
+}
+
 WL_EXPORT struct wlb_compositor *
 wlb_compositor_create(struct wl_display *display)
 {
@@ -180,6 +196,8 @@ wlb_compositor_create(struct wl_display *display)
 		return NULL;
 	
 	comp->display = display;
+
+	wl_list_init(&comp->buffer_type_list);
 
 	wl_list_init(&comp->output_list);
 	wl_list_init(&comp->seat_list);
@@ -192,6 +210,8 @@ wlb_compositor_create(struct wl_display *display)
 			      comp, fullscreen_shell_bind))
 		goto err_alloc;
 	
+	wlb_compositor_add_buffer_type(comp, shm_buffer_size_func, NULL);
+
 	return comp;
 
 err_alloc:
@@ -214,4 +234,41 @@ wlb_compositor_destroy(struct wlb_compositor *comp)
 	wl_display_destroy(comp->display);
 
 	free(comp);
+}
+
+WL_EXPORT int
+wlb_compositor_add_buffer_type(struct wlb_compositor *comp,
+			       wlb_buffer_size_func_t func, void *data)
+{
+	struct wlb_buffer_type *type;
+
+	type = zalloc(sizeof *type);
+	if (!type)
+		return -1;
+
+	type->func = func;
+	type->data = data;
+
+	wl_list_insert(&comp->buffer_type_list, &type->link);
+
+	return 0;
+}
+
+int
+wlb_compositor_get_buffer_size(struct wlb_compositor *comp,
+			       struct wl_resource *buffer,
+			       int32_t *width, int32_t *height)
+{
+	struct wlb_buffer_type *type;
+	int32_t tw, th;
+
+	wl_list_for_each(type, &comp->buffer_type_list, link) {
+		if (type->func(type->data, buffer, &tw, &th) > 0) {
+			*width = tw;
+			*height = th;
+			return 1;
+		}
+	}
+
+	return 0;
 }

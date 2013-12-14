@@ -29,12 +29,25 @@
 
 #include <pixman.h>
 
+struct wlb_buffer_type {
+	struct wl_list link;
+	wlb_buffer_size_func_t func;
+	void *data;
+};
+
 struct wlb_compositor {
 	struct wl_display *display;
+
+	struct wl_list buffer_type_list;
 
 	struct wl_list output_list;
 	struct wl_list seat_list;
 };
+
+int
+wlb_compositor_get_buffer_size(struct wlb_compositor *compositor,
+			       struct wl_resource *buffer,
+			       int32_t *width, int32_t *height);
 
 struct wlb_region {
 	struct wl_resource *resource;
