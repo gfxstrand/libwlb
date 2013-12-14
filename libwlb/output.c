@@ -318,7 +318,7 @@ void
 wlb_output_recompute_surface_position(struct wlb_output *output)
 {
 	int32_t ow, oh, sw, sh;
-	pixman_rectangle32_t fpos;
+	struct wlb_rectangle fpos;
 
 	assert(output->current_mode);
 	assert(output->surface.surface);
@@ -331,8 +331,7 @@ wlb_output_recompute_surface_position(struct wlb_output *output)
 	
 	if (WLB_HAS_FUNC(output, place_surface) &&
 	    WLB_CALL_FUNC(output, place_surface, output->surface.surface,
-			  output->surface.present_method,
-			  &fpos.x, &fpos.y, &fpos.width, &fpos.height) > 0) {
+			  output->surface.present_method, &fpos) > 0) {
 		output->surface.position = fpos;
 		return;
 	}

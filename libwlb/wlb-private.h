@@ -115,7 +115,7 @@ struct wlb_output {
 		enum wl_fullscreen_shell_present_method present_method;
 		uint32_t present_refresh;
 
-		pixman_rectangle32_t position;
+		struct wlb_rectangle position;
 	} surface;
 };
 

@@ -54,8 +54,8 @@ struct wlb_output_funcs {
 			   int32_t width, int32_t height, int32_t refresh);
 	int (*place_surface)(struct wlb_output *output, void *data,
 			     struct wlb_surface *surface,
-			     uint32_t present_method, int32_t *x, int32_t *y,
-			     uint32_t *width, uint32_t *height);
+			     uint32_t present_method,
+			     struct wlb_rectangle *position);
 };
 WL_EXPORT void
 wlb_output_set_funcs_with_size(struct wlb_output *output,
