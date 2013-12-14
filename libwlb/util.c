@@ -30,7 +30,7 @@
 #include <fcntl.h>
 #include <errno.h>
 
-static int
+static inline int
 set_cloexec_or_close(int fd)
 {
 	long flags;
