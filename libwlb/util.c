@@ -127,7 +127,7 @@ wlb_log(enum wlb_log_level level, const char *format, ...)
 	va_start(ap, format);
 	switch (level) {
 	case WLB_LOG_LEVEL_ERROR:
-	case WLG_LOG_LEVEL_WARNING:
+	case WLB_LOG_LEVEL_WARNING:
 		nchars = vfprintf(stderr, format, ap);
 		break;
 	case WLB_LOG_LEVEL_DEBUG:

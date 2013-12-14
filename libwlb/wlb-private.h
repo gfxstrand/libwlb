@@ -274,7 +274,7 @@ int wlb_util_create_tmpfile(size_t size);
 
 enum wlb_log_level {
 	WLB_LOG_LEVEL_ERROR,
-	WLG_LOG_LEVEL_WARNING,
+	WLB_LOG_LEVEL_WARNING,
 	WLB_LOG_LEVEL_DEBUG,
 };
 
