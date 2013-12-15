@@ -287,12 +287,6 @@ wlb_seat_send_capabilities(struct wlb_seat *seat);
 
 int wlb_util_create_tmpfile(size_t size);
 
-enum wlb_log_level {
-	WLB_LOG_LEVEL_ERROR,
-	WLB_LOG_LEVEL_WARNING,
-	WLB_LOG_LEVEL_DEBUG,
-};
-
 int wlb_log(enum wlb_log_level level, const char *format, ...);
 
 #define wlb_error(...) wlb_log(WLB_LOG_LEVEL_ERROR, __VA_ARGS__)

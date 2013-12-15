@@ -118,22 +118,39 @@ wlb_util_create_tmpfile(size_t size)
 	return fd;
 }
 
-int
-wlb_log(enum wlb_log_level level, const char *format, ...)
+static int
+default_log_func(enum wlb_log_level level, const char *format, va_list ap)
 {
-	int nchars;
-	va_list ap;
 
-	va_start(ap, format);
 	switch (level) {
 	case WLB_LOG_LEVEL_ERROR:
 	case WLB_LOG_LEVEL_WARNING:
-		nchars = vfprintf(stderr, format, ap);
-		break;
+		return vfprintf(stderr, format, ap);
 	case WLB_LOG_LEVEL_DEBUG:
 	default:
-		nchars = vfprintf(stdout, format, ap);
+		return vfprintf(stdout, format, ap);
 	}
+
+	return 0;
+}
+
+static wlb_log_func_t wlb_log_func = default_log_func;
+
+WL_EXPORT void
+wlb_log_set_func(wlb_log_func_t func)
+{
+	wlb_log_func = func;
+}
+
+int
+wlb_log(enum wlb_log_level level, const char *format, ...)
+{
+	int nchars = 0;
+	va_list ap;
+
+	va_start(ap, format);
+	if (wlb_log_func)
+		nchars = wlb_log_func(level, format, ap);
 	va_end(ap);
 
 	return nchars;

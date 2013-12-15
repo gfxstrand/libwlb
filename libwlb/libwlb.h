@@ -189,4 +189,14 @@ WL_EXPORT void
 wlb_gles2_renderer_repaint_output(struct wlb_gles2_renderer *renderer,
 				  struct wlb_output *output);
 
+enum wlb_log_level {
+	WLB_LOG_LEVEL_ERROR,
+	WLB_LOG_LEVEL_WARNING,
+	WLB_LOG_LEVEL_DEBUG,
+};
+typedef int (*wlb_log_func_t)(enum wlb_log_level, const char *, va_list);
+
+WL_EXPORT void
+wlb_log_set_func(wlb_log_func_t);
+
 #endif /* !defined LIBWLB_LIBWLB_H */
