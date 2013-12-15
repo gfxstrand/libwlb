@@ -56,7 +56,7 @@ fill_with_black(pixman_image_t *image, pixman_region32_t *region)
 
 static void
 paint_shm_buffer(pixman_image_t *image, pixman_region32_t *region,
-		 struct wl_shm_buffer *buffer, pixman_rectangle32_t *pos)
+		 struct wl_shm_buffer *buffer, struct wlb_rectangle *pos)
 {
 	pixman_format_code_t format;
 	int32_t swidth, sheight;
