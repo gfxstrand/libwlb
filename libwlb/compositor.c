@@ -22,6 +22,10 @@
 #include "wlb-private.h"
 
 #include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <errno.h>
+#include <sys/socket.h>
 
 static void
 compositor_create_surface(struct wl_client *client,
@@ -254,7 +258,7 @@ wlb_compositor_add_buffer_type(struct wlb_compositor *comp,
 	return 0;
 }
 
-int
+WL_EXPORT int
 wlb_compositor_get_buffer_size(struct wlb_compositor *comp,
 			       struct wl_resource *buffer,
 			       int32_t *width, int32_t *height)
@@ -272,3 +276,54 @@ wlb_compositor_get_buffer_size(struct wlb_compositor *comp,
 
 	return 0;
 }
+
+WL_EXPORT struct wl_client *
+wlb_compositor_launch_client(struct wlb_compositor *compositor,
+			     const char *exec_path, char * const argv[])
+{
+	struct wl_client *client;
+	int sockets[2];
+	char fd_str[12];
+	const char *tmp_args[2];
+	pid_t pid;
+
+	wlb_debug("Starting client: %s\n", exec_path);
+
+	if (socketpair(AF_UNIX, SOCK_STREAM, 0, sockets)) {
+		wlb_error("socketpair() failed: %s\n", strerror(errno));
+		return NULL;
+	}
+
+	pid = fork();
+	if (pid == -1) {
+		close(sockets[0]);
+		close(sockets[1]);
+		wlb_error("fork() failed: %s\n", strerror(errno));
+		return NULL;
+	} else if (pid == 0) { /* Child */
+		close(sockets[0]);
+
+		snprintf(fd_str, sizeof(fd_str), "%d", sockets[1]);
+		setenv("WAYLAND_SOCKET", fd_str, 1);
+
+		if (argv) {
+			execv(exec_path, argv);
+		} else {
+			tmp_args[0] = exec_path;
+			tmp_args[1] = NULL;
+			execv(exec_path, tmp_args);
+		}
+
+		wlb_error("execv() failed: %s\n", strerror(errno));
+		exit(-1);
+	} else { /* Parent */
+		close(sockets[1]);
+		client = wl_client_create(compositor->display, sockets[0]);
+		if (!client) {
+			wlb_error("Failed to create client\n");
+			close(sockets[0]);
+			return NULL;
+		}
+		return client;
+	}
+} 

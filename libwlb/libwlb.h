@@ -54,6 +54,9 @@ wlb_compositor_destroy(struct wlb_compositor *compositor);
 WL_EXPORT int
 wlb_compositor_add_buffer_type(struct wlb_compositor *compositor,
 			       wlb_buffer_size_func_t func, void *data);
+WL_EXPORT struct wl_client *
+wlb_compositor_launch_client(struct wlb_compositor *compositor,
+			     const char *exec_path, char * const argv[]);
 
 WL_EXPORT struct wlb_output *
 wlb_output_create(struct wlb_compositor *compositor, int32_t width,
