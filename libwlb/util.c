@@ -159,5 +159,11 @@ wlb_log(enum wlb_log_level level, const char *format, ...)
 void *
 zalloc(size_t size)
 {
-	return calloc(1, size);
+	void *data;
+
+	data = malloc(size);
+	if (data)
+		memset(data, 0, size);
+
+	return data;
 }
