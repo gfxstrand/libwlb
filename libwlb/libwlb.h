@@ -73,11 +73,13 @@ struct wlb_output_funcs {
 };
 WL_EXPORT void
 wlb_output_set_funcs_with_size(struct wlb_output *output,
-			       struct wlb_output_funcs *funcs, size_t size);
+			       struct wlb_output_funcs *funcs, void *data,
+			       size_t size);
 static inline void
-wlb_output_set_funcs(struct wlb_output *output, struct wlb_output_funcs *funcs)
+wlb_output_set_funcs(struct wlb_output *output,
+		     struct wlb_output_funcs *funcs, void *data)
 {
-	wlb_output_set_funcs_with_size(output, funcs, sizeof *funcs);
+	wlb_output_set_funcs_with_size(output, funcs, data, sizeof *funcs);
 }
 WL_EXPORT void
 wlb_output_set_transform(struct wlb_output *output,

@@ -159,6 +159,16 @@ wlb_output_destroy(struct wlb_output *output)
 }
 
 WL_EXPORT void
+wlb_output_set_funcs_with_size(struct wlb_output *output,
+			       struct wlb_output_funcs *funcs, void *data,
+			       size_t size)
+{
+	output->funcs = funcs;
+	output->funcs_data = data;
+	output->funcs_size = size;
+}
+
+WL_EXPORT void
 wlb_output_set_transform(struct wlb_output *output,
 			 enum wl_output_transform transform)
 {
