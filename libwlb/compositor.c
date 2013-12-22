@@ -338,7 +338,6 @@ wlb_compositor_launch_client(struct wlb_compositor *compositor,
 	struct wl_client *client;
 	int sockets[2];
 	char fd_str[12];
-	const char *tmp_args[2];
 	pid_t pid;
 
 	wlb_debug("Starting client: %s\n", exec_path);
@@ -363,9 +362,7 @@ wlb_compositor_launch_client(struct wlb_compositor *compositor,
 		if (argv) {
 			execv(exec_path, argv);
 		} else {
-			tmp_args[0] = exec_path;
-			tmp_args[1] = NULL;
-			execv(exec_path, tmp_args);
+			execl(exec_path, exec_path, NULL);
 		}
 
 		wlb_error("execv() failed: %s\n", strerror(errno));
