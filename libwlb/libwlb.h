@@ -81,7 +81,7 @@ struct wlb_buffer_type {
 	 *
 	 * vec4 wlb_get_fragment_color(vec2 coords);
 	 */
-	const char * buffer_shader;
+	const char * gles2_shader;
 	/* Number of textures defined in buffer_shader.  This number must
 	 * not be larger than WLB_BUFFER_MAX_PLANES.  The OpenGL ES2
 	 * renderer will ensure that this many textures are allocated

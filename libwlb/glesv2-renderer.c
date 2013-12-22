@@ -36,16 +36,19 @@
 
 struct gles2_shader {
 	struct wl_list link;
-
 	uint32_t format;
+
 	GLuint fshader;
 	GLuint program;
 
 	GLint va_vertex;
 	GLint vu_buffer_tf;
 	GLint vu_output_tf;
-	GLint fu_texture;
-	GLint fu_color;
+
+	union {
+		GLint fu_texture;
+		GLint fu_color;
+	};
 };
 
 struct gles2_surface {
@@ -76,7 +79,7 @@ struct wlb_gles2_renderer {
 
 	GLuint vertex_shader;
 	struct gles2_shader *solid_shader;
-	struct wl_list shader_list;
+	struct wl_list shm_format_shader_list;
 
 	EGLDisplay egl_display;
 	EGLConfig egl_config;
@@ -123,14 +126,15 @@ static const GLchar *xrgb8888_shader_source =
 "}\n";
 
 static GLuint
-shader_from_source(GLenum shader_type, const GLchar *source)
+shader_from_source(GLenum shader_type, GLsizei count,
+		   const GLchar * const *source)
 {
 	GLuint shader;
 	GLint info;
 	GLchar *log;
 
 	shader = glCreateShader(shader_type);
-	glShaderSource(shader, 1, &source, NULL);
+	glShaderSource(shader, count, source, NULL);
 	glCompileShader(shader);
 
 	glGetShaderiv(shader, GL_COMPILE_STATUS, &info);
@@ -195,13 +199,14 @@ gles2_shader_destroy(struct gles2_shader *shader)
 }
 
 static struct gles2_shader *
-gles2_shader_get_for_source(struct wlb_gles2_renderer *r, const GLchar *source)
+gles2_shader_get_for_source(struct wlb_gles2_renderer *r, GLsizei count,
+			    const GLchar * const *source)
 {
 	struct gles2_shader *shader;
 
 	if (!r->vertex_shader) {
-		r->vertex_shader = shader_from_source(GL_VERTEX_SHADER,
-						      vertex_shader_source);
+		r->vertex_shader = shader_from_source(GL_VERTEX_SHADER, 1,
+						      &vertex_shader_source);
 		if (!r->vertex_shader)
 			return NULL;
 	}
@@ -210,7 +215,7 @@ gles2_shader_get_for_source(struct wlb_gles2_renderer *r, const GLchar *source)
 	if (!shader)
 		return NULL;
 	
-	shader->fshader = shader_from_source(GL_FRAGMENT_SHADER, source);
+	shader->fshader = shader_from_source(GL_FRAGMENT_SHADER, count, source);
 	if (!shader->fshader)
 		goto err_alloc;
 	
@@ -224,9 +229,6 @@ gles2_shader_get_for_source(struct wlb_gles2_renderer *r, const GLchar *source)
 		glGetUniformLocation(shader->program, "vu_buffer_tf");
 	shader->vu_output_tf =
 		glGetUniformLocation(shader->program, "vu_output_tf");
-	shader->fu_texture =
-		glGetUniformLocation(shader->program, "fu_texture");
-	shader->fu_color = glGetUniformLocation(shader->program, "fu_color");
 
 	return shader;
 
@@ -242,16 +244,18 @@ gles2_shader_get_for_format(struct wlb_gles2_renderer *r, uint32_t format)
 {
 	struct gles2_shader *shader;
 
-	wl_list_for_each(shader, &r->shader_list, link)
+	wl_list_for_each(shader, &r->shm_format_shader_list, link)
 		if (shader->format == format)
 			return shader;
 
 	switch (format) {
 	case WL_SHM_FORMAT_ARGB8888:
-		shader = gles2_shader_get_for_source(r, argb8888_shader_source);
+		shader = gles2_shader_get_for_source(r, 1,
+						     &argb8888_shader_source);
 		break;
 	case WL_SHM_FORMAT_XRGB8888:
-		shader = gles2_shader_get_for_source(r, xrgb8888_shader_source);
+		shader = gles2_shader_get_for_source(r, 1,
+						     &xrgb8888_shader_source);
 		break;
 	default:
 		wlb_error("Invalid buffer format: %u", format);
@@ -261,9 +265,12 @@ gles2_shader_get_for_format(struct wlb_gles2_renderer *r, uint32_t format)
 
 	if (!shader)
 		return NULL;
+
+	shader->fu_texture =
+		glGetUniformLocation(shader->program, "fu_texture");
 	
 	shader->format = format;
-	wl_list_insert(&r->shader_list, &shader->link);
+	wl_list_insert(&r->shm_format_shader_list, &shader->link);
 
 	return shader;
 }
@@ -274,10 +281,13 @@ gles2_shader_get_solid(struct wlb_gles2_renderer *r)
 	if (r->solid_shader)
 		return r->solid_shader;
 
-	r->solid_shader = gles2_shader_get_for_source(r, solid_shader_source);
+	r->solid_shader = gles2_shader_get_for_source(r, 1,
+						      &solid_shader_source);
 	if (!r->solid_shader)
 		return NULL;
 
+	r->solid_shader->fu_color =
+		glGetUniformLocation(r->solid_shader->program, "fu_color");
 	r->solid_shader->format = 0xffffffff;
 
 	return r->solid_shader;
@@ -519,7 +529,7 @@ wlb_gles2_renderer_create(struct wlb_compositor *c)
 	wl_list_init(&renderer->surface_list);
 	wl_list_init(&renderer->output_list);
 
-	wl_list_init(&renderer->shader_list);
+	wl_list_init(&renderer->shm_format_shader_list);
 
 	renderer->egl_display = EGL_NO_DISPLAY;
 	renderer->egl_context = EGL_NO_CONTEXT;
@@ -614,7 +624,7 @@ wlb_gles2_renderer_destroy(struct wlb_gles2_renderer *gr)
 		gles2_output_destroy(output);
 
 	gles2_shader_destroy(gr->solid_shader);
-	wl_list_for_each_safe(shader, shnext, &gr->shader_list, link)
+	wl_list_for_each_safe(shader, shnext, &gr->shm_format_shader_list, link)
 		gles2_shader_destroy(shader);
 
 	free(gr);
