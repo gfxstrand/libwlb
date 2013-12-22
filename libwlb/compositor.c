@@ -29,6 +29,14 @@
 #include <assert.h>
 #include <errno.h>
 
+struct wlb_buffer_type_item {
+	struct wl_list link;
+
+	struct wlb_buffer_type *type;
+	void *type_data;
+	size_t type_size;
+};
+
 static void
 compositor_create_surface(struct wl_client *client,
 			  struct wl_resource *resource, uint32_t id)
@@ -261,12 +269,18 @@ wlb_compositor_destroy(struct wlb_compositor *comp)
 {
 	struct wlb_output *output, *onext;
 	struct wlb_seat *seat, *snext;
+	struct wlb_buffer_type_item *item, *inext;
 
 	wl_list_for_each_safe(output, onext, &comp->output_list, compositor_link)
 		wlb_output_destroy(output);
 
 	wl_list_for_each_safe(seat, snext, &comp->seat_list, compositor_link)
 		wlb_seat_destroy(seat);
+
+	wl_list_for_each_safe(item, inext, &comp->buffer_type_list, link) {
+		wl_list_remove(&item->link);
+		free(item);
+	}
 	
 	wl_display_destroy(comp->display);
 

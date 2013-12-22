@@ -29,14 +29,6 @@
 
 #include <pixman.h>
 
-struct wlb_buffer_type_item {
-	struct wl_list link;
-
-	struct wlb_buffer_type *type;
-	void *type_data;
-	size_t type_size;
-};
-
 struct wlb_compositor {
 	struct wl_display *display;
 
