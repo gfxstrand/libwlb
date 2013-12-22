@@ -155,8 +155,11 @@ static void
 surface_commit(struct wl_client *client, struct wl_resource *resource)
 {
 	struct wlb_surface *surface = wl_resource_get_user_data(resource);
-	int32_t bwidth, bheight;
 	struct wlb_output *output;
+	struct wlb_buffer_type *type;
+	void *buffer_type_data;
+	size_t buffer_type_size;
+	int32_t bwidth, bheight;
 
 	if (surface->buffer) {
 		if (surface->buffer != surface->pending.buffer)
@@ -167,22 +170,29 @@ surface_commit(struct wl_client *client, struct wl_resource *resource)
 	surface->buffer = surface->pending.buffer;
 
 	if (!surface->buffer) {
-		surface->width = 0;
-		surface->height = 0;
-	} else if (wlb_compositor_get_buffer_size(surface->compositor,
-						  surface->buffer,
-						  &bwidth, &bheight) > 0) {
-		if (surface->width != bwidth || surface->height != bheight) {
-			surface->width = bwidth;
-			surface->height = bheight;
-
-			wl_list_for_each(output, &surface->output_list, surface.link)
-				wlb_output_recompute_surface_position(output);
-		}
+		bwidth = 0;
+		bheight = 0;
 	} else {
-		wlb_warn("Unknown buffer type");
-		surface->width = -1;
-		surface->height = -1;
+		type = wlb_compositor_get_buffer_type(surface->compositor,
+						      surface->buffer,
+						      &buffer_type_data,
+						      &buffer_type_size);
+		if (type) {
+			type->get_size(buffer_type_data, surface->buffer,
+				       &bwidth, &bheight);
+		} else {
+			wlb_warn("Unknown buffer type");
+			bwidth = -1;
+			bheight = -1;
+		}
+	}
+
+	if (surface->width != bwidth || surface->height != bheight) {
+		surface->width = bwidth;
+		surface->height = bheight;
+
+		wl_list_for_each(output, &surface->output_list, surface.link)
+			wlb_output_recompute_surface_position(output);
 	}
 
 	if (surface->buffer)

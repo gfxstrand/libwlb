@@ -331,25 +331,6 @@ wlb_compositor_get_buffer_type(struct wlb_compositor *comp,
 	return NULL;
 }
 
-int
-wlb_compositor_get_buffer_size(struct wlb_compositor *comp,
-			       struct wl_resource *buffer,
-			       int32_t *width, int32_t *height)
-{
-	struct wlb_buffer_type *type;
-	size_t size;
-	void *data;
-
-	type = wlb_compositor_get_buffer_type(comp, buffer, &data, &size);
-
-	if (!type)
-		return 0;
-
-	type->get_size(data, buffer, width, height);
-
-	return 1;
-}
-
 WL_EXPORT struct wl_client *
 wlb_compositor_launch_client(struct wlb_compositor *compositor,
 			     const char *exec_path, char * const argv[])

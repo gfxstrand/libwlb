@@ -38,11 +38,6 @@ struct wlb_compositor {
 	struct wl_list seat_list;
 };
 
-int
-wlb_compositor_get_buffer_size(struct wlb_compositor *compositor,
-			       struct wl_resource *buffer,
-			       int32_t *width, int32_t *height);
-
 struct wlb_region {
 	struct wl_resource *resource;
 	pixman_region32_t region;
