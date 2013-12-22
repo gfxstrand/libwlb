@@ -29,10 +29,12 @@
 
 #include <pixman.h>
 
-struct wlb_buffer_type {
+struct wlb_buffer_type_item {
 	struct wl_list link;
-	wlb_buffer_size_func_t func;
-	void *data;
+
+	struct wlb_buffer_type *type;
+	void *type_data;
+	size_t type_size;
 };
 
 struct wlb_compositor {

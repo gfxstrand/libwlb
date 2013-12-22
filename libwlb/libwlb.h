@@ -42,21 +42,85 @@ struct wlb_rectangle {
 	uint32_t width, height;
 };
 
-/* Determines the size of a buffer
- *
- * Must return 0 if it does not recognize the buffer and a positive integer
- * if it does and the size has been set.
- */
-typedef int (*wlb_buffer_size_func_t)(void *data, struct wl_resource *buffer,
-				      int32_t *width, int32_t *height);
+#define WLB_BUFFER_MAX_PLANES 4
+
+struct wlb_buffer_type {
+	/* Returns 1 if the given buffer is of this type and 0 otherwise.
+	 * No other wlb_buffer_type functions will be called if is_type
+	 * returns 0;
+	 *
+	 * This field is required.
+	 */
+	int (*is_type)(void *data, struct wl_resource *buffer);
+
+	/* Retrieves the size of the given buffer
+	 *
+	 * This field is required.
+	 */
+	void (*get_size)(void *data, struct wl_resource *buffer,
+			 int32_t *width, int32_t *height);
+
+	/* Maps the given buffer to CPU-readable memory.  The format
+	 * must be one of the WL_SHM_FORMAT types.
+	 *
+	 * If the buffer type is not CPU-mappable, this should be set to null.  
+	 */
+	void * (*mmap)(void *data, struct wl_resource *buffer, uint32_t *stride,
+		     uint32_t *format);
+
+	/* Unmaps the given buffer.  The `maped` parameter is the pointer
+	 * returned by mmap.
+	 *
+	 * If the buffer type is not CPU-mappable, this should be set to null.  
+	 */
+	void (*munmap)(void *data, struct wl_resource *buffer, void *maped);
+
+	/* A piece of a fragment shader.  The given string must contain
+	 * definitions of any needed textures as well as define a function
+	 * that returns the RGBA color at the given coordinates:
+	 *
+	 * vec4 wlb_get_fragment_color(vec2 coords);
+	 */
+	const char * buffer_shader;
+	/* Number of textures defined in buffer_shader.  This number must
+	 * not be larger than WLB_BUFFER_MAX_PLANES.  The OpenGL ES2
+	 * renderer will ensure that this many textures are allocated
+	 * before calling attach.
+	 */
+	int num_planes;
+
+	/* Informs the user that the shader program has been linked.  If
+	 * you want to update a uniform cache, now is the time to do it
+	 */
+	void (*program_linked)(void *data, GLuint program);
+
+	/* Requests the user to attach the given buffer to the given
+	 * program and texture slots.
+	 */
+	void (*attach)(void *data, struct wl_resource *buffer, GLuint program,
+		       GLuint textures[]);
+};
 
 WL_EXPORT struct wlb_compositor *
 wlb_compositor_create(struct wl_display *display);
 WL_EXPORT void
 wlb_compositor_destroy(struct wlb_compositor *compositor);
 WL_EXPORT int
+wlb_compositor_add_buffer_type_with_size(struct wlb_compositor *compositor,
+					 struct wlb_buffer_type *type,
+					 void *data, size_t size);
+static inline void
 wlb_compositor_add_buffer_type(struct wlb_compositor *compositor,
-			       wlb_buffer_size_func_t func, void *data);
+			       struct wlb_buffer_type *type, void *data)
+{
+	wlb_compositor_add_buffer_type_with_size(compositor, type, data,
+						 sizeof *type);
+}
+
+WL_EXPORT struct wlb_buffer_type *
+wlb_compositor_get_buffer_type(struct wlb_compositor *compositor,
+			       struct wl_resource *buffer,
+			       void **data, size_t *size);
 WL_EXPORT struct wl_client *
 wlb_compositor_launch_client(struct wlb_compositor *compositor,
 			     const char *exec_path, char * const argv[]);

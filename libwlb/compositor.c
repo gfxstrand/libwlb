@@ -23,9 +23,11 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <unistd.h>
 #include <string.h>
-#include <errno.h>
 #include <sys/socket.h>
+#include <assert.h>
+#include <errno.h>
 
 static void
 compositor_create_surface(struct wl_client *client,
@@ -175,20 +177,51 @@ fullscreen_shell_bind(struct wl_client *client,
 }
 
 static int
-shm_buffer_size_func(void *data, struct wl_resource *buffer,
-		     int32_t *width, int32_t *height)
+shm_buffer_is_type(void *data, struct wl_resource *buffer)
+{
+	return wl_shm_buffer_get(buffer) ? 1 : 0;
+}
+
+static void
+shm_buffer_get_size(void *data, struct wl_resource *buffer,
+		    int32_t *width, int32_t *height)
 {
 	struct wl_shm_buffer *shm_buffer;
 
 	shm_buffer = wl_shm_buffer_get(buffer);
-	if (!shm_buffer)
-		return 0;
+	assert(shm_buffer);
 
 	*width = wl_shm_buffer_get_width(shm_buffer);
 	*height = wl_shm_buffer_get_height(shm_buffer);
-
-	return 1;
 }
+
+static void *
+shm_buffer_mmap(void *data, struct wl_resource *buffer,
+		uint32_t *stride, uint32_t *format)
+{
+	struct wl_shm_buffer *shm_buffer;
+
+	shm_buffer = wl_shm_buffer_get(buffer);
+	assert(shm_buffer);
+
+	*stride = wl_shm_buffer_get_stride(shm_buffer);
+	*format = wl_shm_buffer_get_format(shm_buffer);
+
+	return wl_shm_buffer_get_data(shm_buffer);
+}
+
+static void
+shm_buffer_munmap(void *data, struct wl_resource *buffer, void *mapped)
+{
+	/* XXX: Protect memory */
+}
+
+struct wlb_buffer_type shm_buffer_type = {
+	shm_buffer_is_type,
+	shm_buffer_get_size,
+	shm_buffer_mmap,
+	shm_buffer_munmap
+};
 
 WL_EXPORT struct wlb_compositor *
 wlb_compositor_create(struct wl_display *display)
@@ -214,7 +247,7 @@ wlb_compositor_create(struct wl_display *display)
 			      comp, fullscreen_shell_bind))
 		goto err_alloc;
 	
-	wlb_compositor_add_buffer_type(comp, shm_buffer_size_func, NULL);
+	wlb_compositor_add_buffer_type(comp, &shm_buffer_type, NULL);
 
 	return comp;
 
@@ -241,40 +274,66 @@ wlb_compositor_destroy(struct wlb_compositor *comp)
 }
 
 WL_EXPORT int
-wlb_compositor_add_buffer_type(struct wlb_compositor *comp,
-			       wlb_buffer_size_func_t func, void *data)
+wlb_compositor_add_buffer_type_with_size(struct wlb_compositor *comp,
+					 struct wlb_buffer_type *type,
+					 void *data, size_t size)
 {
-	struct wlb_buffer_type *type;
+	struct wlb_buffer_type_item *item;
 
-	type = zalloc(sizeof *type);
-	if (!type)
+	if (!type || !size) {
+		wlb_error("Tried to register null buffer type");
+		errno = EINVAL;
+		return -1;
+	}
+
+	item = zalloc(sizeof *item);
+	if (!item)
 		return -1;
 
-	type->func = func;
-	type->data = data;
+	item->type = type;
+	item->type_data = data;
+	item->type_size = size;
 
-	wl_list_insert(&comp->buffer_type_list, &type->link);
+	wl_list_insert(&comp->buffer_type_list, &item->link);
 
 	return 0;
 }
 
-WL_EXPORT int
+WL_EXPORT struct wlb_buffer_type *
+wlb_compositor_get_buffer_type(struct wlb_compositor *comp,
+			       struct wl_resource *buffer,
+			       void **data, size_t *size)
+{
+	struct wlb_buffer_type_item *item;
+
+	wl_list_for_each(item, &comp->buffer_type_list, link) {
+		if (item->type->is_type(item->type_data, buffer)) {
+			*data = item->type_data;
+			*size = item->type_size;
+			return item->type;
+		}
+	}
+
+	return NULL;
+}
+
+int
 wlb_compositor_get_buffer_size(struct wlb_compositor *comp,
 			       struct wl_resource *buffer,
 			       int32_t *width, int32_t *height)
 {
 	struct wlb_buffer_type *type;
-	int32_t tw, th;
+	size_t size;
+	void *data;
 
-	wl_list_for_each(type, &comp->buffer_type_list, link) {
-		if (type->func(type->data, buffer, &tw, &th) > 0) {
-			*width = tw;
-			*height = th;
-			return 1;
-		}
-	}
+	type = wlb_compositor_get_buffer_type(comp, buffer, &data, &size);
 
-	return 0;
+	if (!type)
+		return 0;
+
+	type->get_size(data, buffer, width, height);
+
+	return 1;
 }
 
 WL_EXPORT struct wl_client *
