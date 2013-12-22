@@ -40,6 +40,8 @@
 #include <X11/Xlib.h>
 #include <X11/Xlib-xcb.h>
 
+#include <EGL/egl.h>
+
 #include <xkbcommon/xkbcommon.h>
 
 #include <pixman.h>

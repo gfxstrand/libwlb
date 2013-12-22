@@ -21,8 +21,6 @@
  * OF THIS SOFTWARE.
  */
 
-#include "wlb-private.h"
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <assert.h>
@@ -33,6 +31,8 @@
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 #include "weston-egl-ext.h"
+
+#include "wlb-private.h"
 
 struct gles2_shader {
 	struct wl_list link;

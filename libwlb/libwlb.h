@@ -25,7 +25,10 @@
 
 #include <wayland-server.h>
 #include <pixman.h>
-#include <EGL/egl.h>
+
+#ifndef GL_TRUE
+typedef uint32_t GLuint;
+#endif
 
 struct wlb_compositor;
 struct wlb_output;
@@ -181,18 +184,21 @@ wlb_pointer_leave_output(struct wlb_pointer *pointer);
 struct wlb_gles2_renderer;
 WL_EXPORT struct wlb_gles2_renderer *
 wlb_gles2_renderer_create(struct wlb_compositor *c);
+WL_EXPORT void
+wlb_gles2_renderer_destroy(struct wlb_gles2_renderer *renderer);
+WL_EXPORT void
+wlb_gles2_renderer_repaint_output(struct wlb_gles2_renderer *renderer,
+				  struct wlb_output *output);
+
+#ifdef EGL_OPENGL_ES2_BIT
 WL_EXPORT struct wlb_gles2_renderer *
 wlb_gles2_renderer_create_for_egl(struct wlb_compositor *c,
 				  EGLDisplay display, EGLConfig *config);
 WL_EXPORT void
-wlb_gles2_renderer_destroy(struct wlb_gles2_renderer *renderer);
-WL_EXPORT void
 wlb_gles2_renderer_add_egl_output(struct wlb_gles2_renderer *renderer,
 				  struct wlb_output *output,
 				  EGLNativeWindowType window);
-WL_EXPORT void
-wlb_gles2_renderer_repaint_output(struct wlb_gles2_renderer *renderer,
-				  struct wlb_output *output);
+#endif /* Have EGL */
 
 enum wlb_log_level {
 	WLB_LOG_LEVEL_ERROR,
