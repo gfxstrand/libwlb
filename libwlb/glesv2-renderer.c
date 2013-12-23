@@ -62,6 +62,7 @@ struct gles2_surface {
 	int32_t width, height;
 	uint32_t pitch;
 
+	struct wl_resource *buffer;
 	struct wlb_buffer_type *buffer_type;
 	void *buffer_type_data;
 	size_t buffer_type_size;
@@ -96,6 +97,8 @@ struct wlb_gles2_renderer {
 	EGLDisplay egl_display;
 	EGLConfig egl_config;
 	EGLContext egl_context;
+
+	struct wlb_wayland_egl_binding *wayland_binding;
 
 	int initialized;
 
@@ -385,8 +388,7 @@ gles2_surface_get(struct wlb_gles2_renderer *gr, struct wlb_surface *surface)
 
 static int
 gles2_surface_update_shm(struct wlb_gles2_renderer *gr,
-			 struct gles2_surface *gs,
-			 struct wl_resource *buffer, int full_damage)
+			 struct gles2_surface *gs, int full_damage)
 {
 	struct wlb_rectangle *drects;
 	uint32_t format, stride;
@@ -407,7 +409,7 @@ gles2_surface_update_shm(struct wlb_gles2_renderer *gr,
 			full_damage = 1;
 	}
 
-	pixel_data = gs->buffer_type->mmap(gs->buffer_type_data, buffer,
+	pixel_data = gs->buffer_type->mmap(gs->buffer_type_data, gs->buffer,
 					   &stride, &format);
 	if (!pixel_data) {
 		wlb_error("Failed to map buffer");
@@ -456,7 +458,7 @@ gles2_surface_update_shm(struct wlb_gles2_renderer *gr,
 done:
 err_mmap:
 	if (gs->buffer_type->munmap)
-		gs->buffer_type->munmap(gs->buffer_type_data, buffer,
+		gs->buffer_type->munmap(gs->buffer_type_data, gs->buffer,
 					pixel_data);
 err_damage:
 	free(drects);
@@ -497,21 +499,19 @@ gles2_surface_ensure_textures(struct gles2_surface *gs, int num_textures)
 static int
 gles2_surface_prepare(struct wlb_gles2_renderer *gr, struct gles2_surface *gs)
 {
-	struct wl_resource *buffer;
 	int32_t width, height;
 	int full_damage = 0;
 
-	buffer = wlb_surface_buffer(gs->surface);
+	gs->buffer = wlb_surface_buffer(gs->surface);
 	gs->buffer_type =
-		wlb_compositor_get_buffer_type(gr->compositor, buffer,
+		wlb_compositor_get_buffer_type(gr->compositor, gs->buffer,
 					       &gs->buffer_type_data,
 					       &gs->buffer_type_size);
 	if (!gs->buffer_type) {
-		wlb_error("Unknown buffer type");
 		return -1;
 	}
 
-	gs->buffer_type->get_size(gs->buffer_type_data, buffer,
+	gs->buffer_type->get_size(gs->buffer_type_data, gs->buffer,
 				  &width, &height);
 
 	if (width < 0 || height < 0) {
@@ -532,14 +532,14 @@ gles2_surface_prepare(struct wlb_gles2_renderer *gr, struct gles2_surface *gs)
 			gles2_shader_get_for_buffer_type(gr, gs->buffer_type,
 							 gs->buffer_type_data);
 		glUseProgram(gs->shader->program);
-		gs->buffer_type->attach(gs->buffer_type_data, buffer,
+		gs->buffer_type->attach(gs->buffer_type_data, gs->buffer,
 					gs->shader->program, gs->textures);
 	} else if (gs->buffer_type->mmap) {
 		if (gs->textures[0] == 0)
 			full_damage = 1;
 
 		gles2_surface_ensure_textures(gs, 1);
-		if (gles2_surface_update_shm(gr, gs, buffer, full_damage) < 0)
+		if (gles2_surface_update_shm(gr, gs, full_damage) < 0)
 			return -1;
 	} else {
 		wlb_error("Buffer type is not CPU-mappable and does not proivde a GLES2 attach mechanism");
@@ -549,6 +549,13 @@ gles2_surface_prepare(struct wlb_gles2_renderer *gr, struct gles2_surface *gs)
 	wlb_surface_reset_damage(gs->surface);
 
 	return 0;
+}
+
+static void
+gles2_surface_finish(struct wlb_gles2_renderer *gr, struct gles2_surface *gs)
+{
+	if (gs->buffer_type->detach)
+		gs->buffer_type->detach(gs->buffer_type_data, gs->buffer);
 }
 
 static void
@@ -740,6 +747,9 @@ wlb_gles2_renderer_destroy(struct wlb_gles2_renderer *gr)
 	struct gles2_output *output, *onext;
 	struct gles2_shader *shader, *shnext;
 
+	if (gr->wayland_binding)
+		wlb_wayland_egl_binding_destroy(gr->wayland_binding);
+
 	wl_list_for_each_safe(surface, sunext, &gr->surface_list, link)
 		gles2_surface_destroy(surface);
 
@@ -785,12 +795,30 @@ static void
 wlb_gles2_renderer_initialize(struct wlb_gles2_renderer *gr)
 {
 	const char *extensions;
+	EGLDisplay egl_display;
 
 	if (gr->initialized)
-		return;
+		return;	
+
+	if (gr->egl_display == EGL_NO_DISPLAY) {
+		egl_display = eglGetCurrentDisplay();
+	} else {
+		egl_display = gr->egl_display;
+	}
+
+	if (egl_display != EGL_NO_DISPLAY) {
+		extensions = (const char *) eglQueryString(egl_display,
+							   EGL_EXTENSIONS);
+		wlb_debug("Available EGL Extensions:\n%s\n\n", extensions);
+
+		if (strstr(extensions, "EGL_WL_bind_wayland_display"))
+			gr->wayland_binding =
+				wlb_wayland_egl_binding_create(gr->compositor,
+							       egl_display);
+	}
 	
 	extensions = (const char *) glGetString(GL_EXTENSIONS);
-	wlb_debug("Available GLES 2.0 Extensions:\n%s\n", extensions);
+	wlb_debug("Available GLES 2.0 Extensions:\n%s\n\n", extensions);
 
 #ifdef GL_EXT_unpack_subimage
 	if (strstr(extensions, "GL_EXT_unpack_subimage"))
@@ -864,6 +892,8 @@ paint_surface(struct wlb_gles2_renderer *gr, struct wlb_output *output)
 	glEnableVertexAttribArray(gs->shader->va_vertex);
 	glDrawArrays(GL_TRIANGLES, 0, gr->vertices.size / (sizeof(GLfloat)*2));
 	glDisableVertexAttribArray(gs->shader->va_vertex);
+
+	gles2_surface_finish(gr, gs);
 }
 
 WL_EXPORT void

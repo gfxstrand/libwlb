@@ -99,12 +99,21 @@ struct wlb_buffer_type {
 	 */
 	void (*attach)(void *data, struct wl_resource *buffer, GLuint program,
 		       GLuint textures[]);
+	/* Notifies the user that the given buffer is no longer in use and
+	 * should be unbound.
+	 *
+	 * This may be NULL if detaching is not required for this buffer
+	 * type.
+	 */
+	void (*detach)(void *data, struct wl_resource *buffer);
 };
 
 WL_EXPORT struct wlb_compositor *
 wlb_compositor_create(struct wl_display *display);
 WL_EXPORT void
 wlb_compositor_destroy(struct wlb_compositor *compositor);
+WL_EXPORT struct wl_display *
+wlb_compositor_get_display(struct wlb_compositor *compositor);
 WL_EXPORT int
 wlb_compositor_add_buffer_type_with_size(struct wlb_compositor *compositor,
 					 struct wlb_buffer_type *type,
@@ -262,6 +271,13 @@ WL_EXPORT void
 wlb_gles2_renderer_add_egl_output(struct wlb_gles2_renderer *renderer,
 				  struct wlb_output *output,
 				  EGLNativeWindowType window);
+
+struct wlb_wayland_egl_binding;
+
+WL_EXPORT struct wlb_wayland_egl_binding *
+wlb_wayland_egl_binding_create(struct wlb_compositor *comp, EGLDisplay display);
+WL_EXPORT void
+wlb_wayland_egl_binding_destroy(struct wlb_wayland_egl_binding *binding);
 #endif /* Have EGL */
 
 enum wlb_log_level {

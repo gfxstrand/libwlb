@@ -7,7 +7,7 @@ libwlb_la_LIBADD = $(WAYLAND_LIBS) $(PIXMAN_LIBS)
 libwlb_la_SOURCES =			\
 	fullscreen-shell-protocol.c	\
 	util.c				\
-	matrix.c				\
+	matrix.c			\
 	surface.c			\
 	output.c			\
 	seat.c				\
@@ -17,7 +17,7 @@ libwlb_la_SOURCES =			\
 	compositor.c
 
 if ENABLE_GLES2
-libwlb_la_SOURCES += glesv2-renderer.c
+libwlb_la_SOURCES += glesv2-renderer.c wayland-egl-binding.c
 libwlb_la_LIBADD += $(EGL_LIBS) $(GLES2_LIBS)
 endif
 

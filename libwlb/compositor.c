@@ -287,6 +287,12 @@ wlb_compositor_destroy(struct wlb_compositor *comp)
 	free(comp);
 }
 
+WL_EXPORT struct wl_display *
+wlb_compositor_get_display(struct wlb_compositor *comp)
+{
+	return comp->display;
+}
+
 WL_EXPORT int
 wlb_compositor_add_buffer_type_with_size(struct wlb_compositor *comp,
 					 struct wlb_buffer_type *type,

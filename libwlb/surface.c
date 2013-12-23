@@ -181,7 +181,7 @@ surface_commit(struct wl_client *client, struct wl_resource *resource)
 			type->get_size(buffer_type_data, surface->buffer,
 				       &bwidth, &bheight);
 		} else {
-			wlb_warn("Unknown buffer type");
+			wlb_warn("Unknown buffer type\n");
 			bwidth = -1;
 			bheight = -1;
 		}
