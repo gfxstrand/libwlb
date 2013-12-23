@@ -36,7 +36,10 @@
 
 struct gles2_shader {
 	struct wl_list link;
-	uint32_t format;
+	union {
+		uint32_t format;
+		struct wlb_buffer_type *type;
+	};
 
 	GLuint fshader;
 	GLuint program;
@@ -56,10 +59,16 @@ struct gles2_surface {
 	struct wl_list link;
 	struct wl_listener destroy_listener;
 
-	int32_t width, height, pitch;
-	uint32_t format;
+	int32_t width, height;
+	uint32_t pitch;
 
-	GLuint texture;
+	struct wlb_buffer_type *buffer_type;
+	void *buffer_type_data;
+	size_t buffer_type_size;
+
+	struct gles2_shader *shader;
+
+	GLuint textures[WLB_BUFFER_MAX_PLANES];
 };
 
 struct gles2_output {
@@ -71,6 +80,8 @@ struct gles2_output {
 };
 
 struct wlb_gles2_renderer {
+	struct wlb_compositor *compositor;
+
 	struct wl_list surface_list;
 	struct wl_list output_list;
 
@@ -80,6 +91,7 @@ struct wlb_gles2_renderer {
 	GLuint vertex_shader;
 	struct gles2_shader *solid_shader;
 	struct wl_list shm_format_shader_list;
+	struct wl_list buffer_type_shader_list;
 
 	EGLDisplay egl_display;
 	EGLConfig egl_config;
@@ -123,6 +135,12 @@ static const GLchar *xrgb8888_shader_source =
 "\n"
 "void main() {\n"
 "	gl_FragColor = texture2D(fu_texture, vo_tex_coord).bgra;\n"
+"}\n";
+
+static const GLchar *buffer_type_shader_source = 
+"varying mediump vec2 vo_tex_coord;\n"
+"void main() {\n"
+"	gl_FragColor = wlb_get_fragment_color(vo_tex_coord);\n"
 "}\n";
 
 static GLuint
@@ -240,7 +258,7 @@ err_alloc:
 }
 
 static struct gles2_shader *
-gles2_shader_get_for_format(struct wlb_gles2_renderer *r, uint32_t format)
+gles2_shader_get_for_shm_format(struct wlb_gles2_renderer *r, uint32_t format)
 {
 	struct gles2_shader *shader;
 
@@ -276,6 +294,33 @@ gles2_shader_get_for_format(struct wlb_gles2_renderer *r, uint32_t format)
 }
 
 static struct gles2_shader *
+gles2_shader_get_for_buffer_type(struct wlb_gles2_renderer *r,
+				 struct wlb_buffer_type *type, void *type_data)
+{
+	struct gles2_shader *shader;
+	GLchar const *sources[2];
+
+	wl_list_for_each(shader, &r->buffer_type_shader_list, link)
+		if (shader->type == type)
+			return shader;
+	
+	sources[0] = type->gles2_shader;
+	sources[1] = buffer_type_shader_source;
+	shader = gles2_shader_get_for_source(r, 2, sources);
+
+	if (!shader)
+		return NULL;
+
+	shader->type = type;
+	wl_list_insert(&r->buffer_type_shader_list, &shader->link);
+
+	if (type->program_linked)
+		type->program_linked(type_data, shader->program);
+
+	return shader;
+}
+
+static struct gles2_shader *
 gles2_shader_get_solid(struct wlb_gles2_renderer *r)
 {
 	if (r->solid_shader)
@@ -296,7 +341,7 @@ gles2_shader_get_solid(struct wlb_gles2_renderer *r)
 static void
 gles2_surface_destroy(struct gles2_surface *surface)
 {
-	glDeleteTextures(1, &surface->texture);
+	glDeleteTextures(WLB_BUFFER_MAX_PLANES, surface->textures);
 
 	wl_list_remove(&surface->link);
 	wl_list_remove(&surface->destroy_listener.link);
@@ -338,75 +383,57 @@ gles2_surface_get(struct wlb_gles2_renderer *gr, struct wlb_surface *surface)
 	return gs;
 }
 
-static void
-gles2_surface_flush_damage(struct wlb_gles2_renderer *gr,
-			   struct gles2_surface *gs)
+static int
+gles2_surface_update_shm(struct wlb_gles2_renderer *gr,
+			 struct gles2_surface *gs,
+			 struct wl_resource *buffer, int full_damage)
 {
-	struct wl_resource *buffer;
-	struct wl_shm_buffer *shm_buffer;
 	struct wlb_rectangle *drects;
-	int i, ndrects, needs_full_upload = 0;
-	int32_t width, height;
+	uint32_t format, stride;
+	void *pixel_data;
+	int i, ndrects, err = 0;
 
-	buffer = wlb_surface_buffer(gs->surface);
+	if (full_damage) {
+		drects = NULL;
+	} else {
+		drects = wlb_surface_get_buffer_damage(gs->surface, &ndrects);
 
-	if (!buffer) {
-		if (gs->texture)
-			glDeleteTextures(1, &gs->texture);
-		gs->texture = 0;
-		goto done;
+		if (ndrects == 0)
+			return 0;
+
+		if (!drects)
+			/* Failed to get damage, but we can still try and
+			 * upload the entire thing */
+			full_damage = 1;
 	}
 
-	drects = wlb_surface_get_buffer_damage(gs->surface, &ndrects);
-
-	if (ndrects == 0)
-		return;
-
-	if (!drects)
-		/* Failed to get damage, but we can still try and upload
-		 * the entire thing */
-		needs_full_upload = 1;
-
-	/* Make sure we have a texture */
-	if (!gs->texture) {
-		glGenTextures(1, &gs->texture);
-
-		glBindTexture(GL_TEXTURE_2D, gs->texture);
-		glTexParameteri(GL_TEXTURE_2D,
-				GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D,
-				GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D,
-				GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D,
-				GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-
-		needs_full_upload = 1;
+	pixel_data = gs->buffer_type->mmap(gs->buffer_type_data, buffer,
+					   &stride, &format);
+	if (!pixel_data) {
+		wlb_error("Failed to map buffer");
+		err = 1;
+		goto err_damage;
 	}
 
-	shm_buffer = wl_shm_buffer_get(buffer);
+	gs->pitch = stride / 4;
 
-	assert(shm_buffer);
-
-	width = wl_shm_buffer_get_width(shm_buffer);
-	height = wl_shm_buffer_get_height(shm_buffer);
-	gs->pitch = wl_shm_buffer_get_stride(shm_buffer) / 4;
-	gs->format = wl_shm_buffer_get_format(shm_buffer);
-
-	if (width != gs->width || height != gs->height) {
-		gs->width = width;
-		gs->height = height;
-		needs_full_upload = 1;
+	gs->shader = gles2_shader_get_for_shm_format(gr, format);
+	if (!gs->shader) {
+		wlb_error("Failed to find shader");
+		err = 1;
+		goto err_mmap;
 	}
 
-	wlb_surface_reset_damage(gs->surface);
+	glUseProgram(gs->shader->program);
 
-	void *pixel_data = wl_shm_buffer_get_data(shm_buffer);
+	glUniform1i(gs->shader->fu_texture, 0);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, gs->textures[0]);
 
 #ifdef GL_EXT_unpack_subimage
 	glPixelStorei(GL_UNPACK_ROW_LENGTH_EXT, gs->pitch);
 
-	if (gr->has_unpack_subimage && !needs_full_upload) {
+	if (gr->has_unpack_subimage && full_damage) {
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, gs->width, gs->height,
 			     0, GL_RGBA, GL_UNSIGNED_BYTE, pixel_data);
 		goto done;
@@ -427,8 +454,101 @@ gles2_surface_flush_damage(struct wlb_gles2_renderer *gr,
 		     GL_RGBA, GL_UNSIGNED_BYTE, pixel_data);
 
 done:
+err_mmap:
+	if (gs->buffer_type->munmap)
+		gs->buffer_type->munmap(gs->buffer_type_data, buffer,
+					pixel_data);
+err_damage:
 	free(drects);
-	return;
+
+	return err ? -1 : 0;
+}
+
+static void
+gles2_surface_ensure_textures(struct gles2_surface *gs, int num_textures)
+{
+	int i;
+
+	if (num_textures < 0)
+		num_textures = 0;
+
+	for (i = 0; i < num_textures && i < WLB_BUFFER_MAX_PLANES; ++i) {
+		if (gs->textures[0] != 0)
+			continue;
+
+		glGenTextures(1, &gs->textures[i]);
+
+		glBindTexture(GL_TEXTURE_2D, gs->textures[i]);
+		glTexParameteri(GL_TEXTURE_2D,
+				GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D,
+				GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D,
+				GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D,
+				GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	}
+
+	for (i = num_textures; i < WLB_BUFFER_MAX_PLANES; ++i) {
+		glDeleteTextures(1, &gs->textures[i]);
+	}
+}
+
+static int
+gles2_surface_prepare(struct wlb_gles2_renderer *gr, struct gles2_surface *gs)
+{
+	struct wl_resource *buffer;
+	int32_t width, height;
+	int full_damage = 0;
+
+	buffer = wlb_surface_buffer(gs->surface);
+	gs->buffer_type =
+		wlb_compositor_get_buffer_type(gr->compositor, buffer,
+					       &gs->buffer_type_data,
+					       &gs->buffer_type_size);
+	if (!gs->buffer_type) {
+		wlb_error("Unknown buffer type");
+		return -1;
+	}
+
+	gs->buffer_type->get_size(gs->buffer_type_data, buffer,
+				  &width, &height);
+
+	if (width < 0 || height < 0) {
+		gs->width = 0;
+		gs->height = 0;
+		wlb_error("Invalid buffer size");
+		return -1;
+	} else if (width != gs->width || height != gs->height) {
+		gs->width = width;
+		gs->height = height;
+		full_damage = 1;
+	}
+
+	if (gs->buffer_type->gles2_shader && gs->buffer_type->attach) {
+		gs->pitch = gs->width;
+		gles2_surface_ensure_textures(gs, gs->buffer_type->num_planes);
+		gs->shader =
+			gles2_shader_get_for_buffer_type(gr, gs->buffer_type,
+							 gs->buffer_type_data);
+		glUseProgram(gs->shader->program);
+		gs->buffer_type->attach(gs->buffer_type_data, buffer,
+					gs->shader->program, gs->textures);
+	} else if (gs->buffer_type->mmap) {
+		if (gs->textures[0] == 0)
+			full_damage = 1;
+
+		gles2_surface_ensure_textures(gs, 1);
+		if (gles2_surface_update_shm(gr, gs, buffer, full_damage) < 0)
+			return -1;
+	} else {
+		wlb_error("Buffer type is not CPU-mappable and does not proivde a GLES2 attach mechanism");
+		return -1;
+	}
+
+	wlb_surface_reset_damage(gs->surface);
+
+	return 0;
 }
 
 static void
@@ -526,10 +646,13 @@ wlb_gles2_renderer_create(struct wlb_compositor *c)
 	if (!renderer)
 		return NULL;
 
+	renderer->compositor = c;
+
 	wl_list_init(&renderer->surface_list);
 	wl_list_init(&renderer->output_list);
 
 	wl_list_init(&renderer->shm_format_shader_list);
+	wl_list_init(&renderer->buffer_type_shader_list);
 
 	renderer->egl_display = EGL_NO_DISPLAY;
 	renderer->egl_context = EGL_NO_CONTEXT;
@@ -626,6 +749,8 @@ wlb_gles2_renderer_destroy(struct wlb_gles2_renderer *gr)
 	gles2_shader_destroy(gr->solid_shader);
 	wl_list_for_each_safe(shader, shnext, &gr->shm_format_shader_list, link)
 		gles2_shader_destroy(shader);
+	wl_list_for_each_safe(shader, shnext, &gr->buffer_type_shader_list, link)
+		gles2_shader_destroy(shader);
 
 	free(gr);
 }
@@ -706,47 +831,39 @@ paint_surface(struct wlb_gles2_renderer *gr, struct wlb_output *output)
 	int32_t sx, sy;
 	uint32_t swidth, sheight;
 
-	struct gles2_shader *shader;
-
 	surface = wlb_output_surface(output);
 	gs = gles2_surface_get(gr, surface);
 	if (!gs)
 		return;
-	gles2_surface_flush_damage(gr, gs);
-
-	shader = gles2_shader_get_for_format(gr, gs->format);
-	if (!shader)
+	if (gles2_surface_prepare(gr, gs) < 0)
 		return;
 
-	glUseProgram(shader->program);
-	glUniformMatrix3fv(shader->vu_output_tf, 1, GL_FALSE, gr->output_mat.d);
-
-	wlb_output_surface_position(output, &sx, &sy, &swidth, &sheight);
+	glUniformMatrix3fv(gs->shader->vu_output_tf, 1, GL_FALSE,
+			   gr->output_mat.d);
 
 	wlb_matrix_init(&buffer_mat);
-	if (gs->pitch != gs->width)
+	if ((int32_t)gs->pitch != gs->width)
 		wlb_matrix_scale(&buffer_mat, &buffer_mat,
 				 gs->width / (float)gs->pitch, 1);
+
+	wlb_output_surface_position(output, &sx, &sy, &swidth, &sheight);
 	wlb_matrix_scale(&buffer_mat, &buffer_mat,
 			 1 / (float)swidth, 1 / (float)sheight);
 	wlb_matrix_translate(&buffer_mat, &buffer_mat, -sx, -sy);
-	glUniformMatrix3fv(shader->vu_buffer_tf, 1, GL_FALSE, buffer_mat.d);
 
-	glUniform1i(shader->fu_texture, 0);
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, gs->texture);
-	
+	glUniformMatrix3fv(gs->shader->vu_buffer_tf, 1, GL_FALSE, buffer_mat.d);
+
 	pixman_region32_init_rect(&damage, sx, sy, swidth, sheight);
-	
+
 	gr->vertices.size = 0;
 	make_triangles_from_region(&gr->vertices, &damage);
 	pixman_region32_fini(&damage);
 
-	glVertexAttribPointer(shader->va_vertex, 2, GL_FLOAT, GL_FALSE, 0,
+	glVertexAttribPointer(gs->shader->va_vertex, 2, GL_FLOAT, GL_FALSE, 0,
 			      gr->vertices.data);
-	glEnableVertexAttribArray(shader->va_vertex);
+	glEnableVertexAttribArray(gs->shader->va_vertex);
 	glDrawArrays(GL_TRIANGLES, 0, gr->vertices.size / (sizeof(GLfloat)*2));
-	glDisableVertexAttribArray(shader->va_vertex);
+	glDisableVertexAttribArray(gs->shader->va_vertex);
 }
 
 WL_EXPORT void
