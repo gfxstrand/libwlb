@@ -156,7 +156,7 @@ surface_commit(struct wl_client *client, struct wl_resource *resource)
 {
 	struct wlb_surface *surface = wl_resource_get_user_data(resource);
 	struct wlb_output *output;
-	struct wlb_buffer_type *type;
+	const struct wlb_buffer_type *type;
 	void *buffer_type_data;
 	size_t buffer_type_size;
 	int32_t bwidth, bheight;

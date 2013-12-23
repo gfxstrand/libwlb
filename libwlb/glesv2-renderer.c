@@ -38,7 +38,7 @@ struct gles2_shader {
 	struct wl_list link;
 	union {
 		uint32_t format;
-		struct wlb_buffer_type *type;
+		const struct wlb_buffer_type *type;
 	};
 
 	GLuint fshader;
@@ -63,7 +63,7 @@ struct gles2_surface {
 	uint32_t pitch;
 
 	struct wl_resource *buffer;
-	struct wlb_buffer_type *buffer_type;
+	const struct wlb_buffer_type *buffer_type;
 	void *buffer_type_data;
 	size_t buffer_type_size;
 
@@ -298,7 +298,8 @@ gles2_shader_get_for_shm_format(struct wlb_gles2_renderer *r, uint32_t format)
 
 static struct gles2_shader *
 gles2_shader_get_for_buffer_type(struct wlb_gles2_renderer *r,
-				 struct wlb_buffer_type *type, void *type_data)
+				 const struct wlb_buffer_type *type,
+				 void *type_data)
 {
 	struct gles2_shader *shader;
 	GLchar const *sources[2];

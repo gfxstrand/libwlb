@@ -116,17 +116,17 @@ WL_EXPORT struct wl_display *
 wlb_compositor_get_display(struct wlb_compositor *compositor);
 WL_EXPORT int
 wlb_compositor_add_buffer_type_with_size(struct wlb_compositor *compositor,
-					 struct wlb_buffer_type *type,
+					 const struct wlb_buffer_type *type,
 					 void *data, size_t size);
 static inline void
 wlb_compositor_add_buffer_type(struct wlb_compositor *compositor,
-			       struct wlb_buffer_type *type, void *data)
+			       const struct wlb_buffer_type *type, void *data)
 {
 	wlb_compositor_add_buffer_type_with_size(compositor, type, data,
 						 sizeof *type);
 }
 
-WL_EXPORT struct wlb_buffer_type *
+WL_EXPORT const struct wlb_buffer_type *
 wlb_compositor_get_buffer_type(struct wlb_compositor *compositor,
 			       struct wl_resource *buffer,
 			       void **data, size_t *size);

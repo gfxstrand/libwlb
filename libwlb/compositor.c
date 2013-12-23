@@ -32,7 +32,7 @@
 struct wlb_buffer_type_item {
 	struct wl_list link;
 
-	struct wlb_buffer_type *type;
+	const struct wlb_buffer_type *type;
 	void *type_data;
 	size_t type_size;
 };
@@ -295,7 +295,7 @@ wlb_compositor_get_display(struct wlb_compositor *comp)
 
 WL_EXPORT int
 wlb_compositor_add_buffer_type_with_size(struct wlb_compositor *comp,
-					 struct wlb_buffer_type *type,
+					 const struct wlb_buffer_type *type,
 					 void *data, size_t size)
 {
 	struct wlb_buffer_type_item *item;
@@ -319,7 +319,7 @@ wlb_compositor_add_buffer_type_with_size(struct wlb_compositor *comp,
 	return 0;
 }
 
-WL_EXPORT struct wlb_buffer_type *
+WL_EXPORT const struct wlb_buffer_type *
 wlb_compositor_get_buffer_type(struct wlb_compositor *comp,
 			       struct wl_resource *buffer,
 			       void **data, size_t *size)
