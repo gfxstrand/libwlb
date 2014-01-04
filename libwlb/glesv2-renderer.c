@@ -34,6 +34,9 @@
 
 #include "wlb-private.h"
 
+#define TRUE 1
+#define FALSE 0
+
 struct gles2_shader {
 	struct wl_list link;
 	union {
@@ -55,8 +58,10 @@ struct gles2_shader {
 };
 
 struct gles2_surface {
-	struct wlb_surface *surface;
+	struct wlb_gles2_renderer *renderer;
 	struct wl_list link;
+
+	struct wlb_surface *surface;
 	struct wl_listener destroy_listener;
 
 	int32_t width, height;
@@ -83,7 +88,16 @@ struct gles2_output {
 struct wlb_gles2_renderer {
 	struct wlb_compositor *compositor;
 
+    /* Every surface is placed in one of the following two lists.  The
+     * first is for active surfaces.  The second is for surfaces that have
+     * been removed by the client.  These surfaces will be destroyed in the
+     * next repaint.  This way we ensure that destruction of the surface
+     * occurs inside of the correct OpenGL context
+     */
 	struct wl_list surface_list;
+	struct wl_list surface_cleanup_list;
+
+    /* List of outputs */
 	struct wl_list output_list;
 
 	struct wlb_matrix output_mat;
@@ -212,10 +226,13 @@ program_from_shaders(GLuint vertex_shader, GLuint fragment_shader)
 }
 
 static void
-gles2_shader_destroy(struct gles2_shader *shader)
+gles2_shader_destroy(struct gles2_shader *shader, int cleanup_gl)
 {
-	glDeleteProgram(shader->program);
-	glDeleteShader(shader->fshader);
+	if (cleanup_gl) {
+		glDeleteProgram(shader->program);
+		glDeleteShader(shader->fshader);
+	}
+
 	free(shader);
 }
 
@@ -343,9 +360,10 @@ gles2_shader_get_solid(struct wlb_gles2_renderer *r)
 }
 
 static void
-gles2_surface_destroy(struct gles2_surface *surface)
+gles2_surface_destroy(struct gles2_surface *surface, int cleanup_gl)
 {
-	glDeleteTextures(WLB_BUFFER_MAX_PLANES, surface->textures);
+	if (cleanup_gl)
+		glDeleteTextures(WLB_BUFFER_MAX_PLANES, surface->textures);
 
 	wl_list_remove(&surface->link);
 	wl_list_remove(&surface->destroy_listener.link);
@@ -359,7 +377,9 @@ surface_destroy_handler(struct wl_listener *listener, void *data)
 	struct gles2_surface *gs;
 	
 	gs = wl_container_of(listener, gs, destroy_listener);
-	gles2_surface_destroy(gs);
+
+	wl_list_remove(&gs->link);
+	wl_list_insert(&gs->renderer->surface_cleanup_list, &gs->link);
 }
 
 static struct gles2_surface *
@@ -657,6 +677,7 @@ wlb_gles2_renderer_create(struct wlb_compositor *c)
 	renderer->compositor = c;
 
 	wl_list_init(&renderer->surface_list);
+	wl_list_init(&renderer->surface_cleanup_list);
 	wl_list_init(&renderer->output_list);
 
 	wl_list_init(&renderer->shm_format_shader_list);
@@ -745,23 +766,33 @@ WL_EXPORT void
 wlb_gles2_renderer_destroy(struct wlb_gles2_renderer *gr)
 {
 	struct gles2_surface *surface, *sunext;
-	struct gles2_output *output, *onext;
+	struct gles2_output *output, *onext, *found_output;
 	struct gles2_shader *shader, *shnext;
+
+	/* If we have a context, then we don't need to bother cleanin up
+	 * because we're going to delete that context.  If we're working
+	 * inside someone else's context, let's play nice
+	 */
+	int cleanup_gl = (gr->egl_context == EGL_NO_CONTEXT);
 
 	if (gr->wayland_binding)
 		wlb_wayland_egl_binding_destroy(gr->wayland_binding);
 
 	wl_list_for_each_safe(surface, sunext, &gr->surface_list, link)
-		gles2_surface_destroy(surface);
+		gles2_surface_destroy(surface, cleanup_gl);
 
 	wl_list_for_each_safe(output, onext, &gr->output_list, link)
 		gles2_output_destroy(output);
 
-	gles2_shader_destroy(gr->solid_shader);
+	gles2_shader_destroy(gr->solid_shader, cleanup_gl);
 	wl_list_for_each_safe(shader, shnext, &gr->shm_format_shader_list, link)
-		gles2_shader_destroy(shader);
+		gles2_shader_destroy(shader, cleanup_gl);
 	wl_list_for_each_safe(shader, shnext, &gr->buffer_type_shader_list, link)
-		gles2_shader_destroy(shader);
+		gles2_shader_destroy(shader, cleanup_gl);
+
+	if (gr->egl_context != EGL_NO_CONTEXT) {
+		eglDestroyContext(gr->egl_display, gr->egl_context);
+	}
 
 	free(gr);
 }
@@ -902,6 +933,7 @@ wlb_gles2_renderer_repaint_output(struct wlb_gles2_renderer *gr,
 				  struct wlb_output *output)
 {
 	struct gles2_output *go;
+	struct gles2_surface *surface, *snext;
 
 	assert(output->current_mode);
 
@@ -916,6 +948,12 @@ wlb_gles2_renderer_repaint_output(struct wlb_gles2_renderer *gr,
 	}
 
 	wlb_gles2_renderer_initialize(gr);
+
+	/* We clean up dead surfaces here.  This way we are sure that the
+	 * cleanup happens inside the correct OpenGL context */
+	wl_list_for_each_safe(surface, snext, &gr->surface_cleanup_list, link)
+		gles2_surface_destroy(surface, TRUE);
+
 
 	glViewport(0, 0,
 		   output->current_mode->width,
