@@ -200,26 +200,13 @@ struct wlb_pointer {
 	struct wl_listener output_destroy_listener;
 };
 
-struct wlb_pointer *
-wlb_pointer_create(struct wlb_seat *seat);
 void
 wlb_pointer_create_resource(struct wlb_pointer *pointer,
 			    struct wl_client *client, uint32_t id);
 void
-wlb_pointer_destroy(struct wlb_pointer *pointer);
-void
 wlb_pointer_set_focus(struct wlb_pointer *pointer, struct wlb_output *output);
 void
 wlb_pointer_update_focus(struct wlb_pointer *pointer);
-void
-wlb_pointer_send_motion(struct wlb_pointer *pointer, uint32_t time,
-			wl_fixed_t x, wl_fixed_t y);
-void
-wlb_pointer_send_button(struct wlb_pointer *pointer, uint32_t time,
-			uint32_t button, enum wl_pointer_button_state state);
-void
-wlb_pointer_send_axis(struct wlb_pointer *pointer, uint32_t time,
-		      enum wl_pointer_axis axis, wl_fixed_t value);
 
 struct wlb_keyboard {
 	struct wlb_seat *seat;
@@ -239,26 +226,12 @@ struct wlb_keyboard {
 	} keymap;
 };
 
-struct wlb_keyboard *
-wlb_keyboard_create(struct wlb_seat *seat);
-void
-wlb_keyboard_destroy(struct wlb_keyboard *keyboard);
 void
 wlb_keyboard_create_resource(struct wlb_keyboard *keyboard,
 			     struct wl_client *client, uint32_t id);
 void
 wlb_keyboard_set_focus(struct wlb_keyboard *keyboard,
 		       struct wlb_surface *focus);
-int
-wlb_keyboard_set_keymap(struct wlb_keyboard *keyboard, const void *data,
-			size_t size, enum wl_keyboard_keymap_format format);
-void
-wlb_keyboard_key(struct wlb_keyboard *keyboard, uint32_t time,
-		 uint32_t key, enum wl_keyboard_key_state state);
-void
-wlb_keyboard_modifiers(struct wlb_keyboard *keyboard, uint32_t mods_depressed,
-		       uint32_t mods_latched, uint32_t mods_locked,
-		       uint32_t group);
 
 struct wlb_seat {
 	struct wlb_compositor *compositor;
