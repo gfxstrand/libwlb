@@ -196,14 +196,23 @@ wlb_touch_up(struct wlb_touch *touch, uint32_t time, int32_t id)
 
 	wl_resource_for_each(resource, &touch->resource_list)
 		wl_touch_send_up(resource, serial, time, id);
+	
+	wl_list_remove(&finger->link);
+	free(finger);
 }
 
 WL_EXPORT void
 wlb_touch_cancel(struct wlb_touch *touch)
 {
 	struct wl_resource *resource;
+	struct wlb_finger *finger, *fnext;
 
 	wl_resource_for_each(resource, &touch->resource_list)
 		wl_touch_send_cancel(resource);
+	
+	wl_list_for_each_safe(finger, fnext, &touch->finger_list, link) {
+		wl_list_remove(&finger->link);
+		free(finger);
+	}
 }
 
