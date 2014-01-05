@@ -509,11 +509,11 @@ wlb_output_to_surface_coords(struct wlb_output *output,
 	y -= wl_fixed_from_int(output->surface.position.y);
 
 	if (sx)
-		*sx = (x * (int64_t)output->surface.position.width) /
-		      output->current_mode->width;
+		*sx = (x * (int64_t)output->surface.surface->width) /
+		      output->surface.position.width;
 	if (sy)
-		*sy = (y * (int64_t)output->surface.position.height) /
-		      output->current_mode->height;
+		*sy = (y * (int64_t)output->surface.surface->height) /
+		      output->surface.position.height;
 }
 
 struct wlb_output *
