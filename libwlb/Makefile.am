@@ -13,6 +13,7 @@ libwlb_la_SOURCES =			\
 	seat.c				\
 	pointer.c			\
 	keyboard.c			\
+	touch.c				\
 	pixman-renderer.c		\
 	compositor.c
 

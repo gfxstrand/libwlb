@@ -208,6 +208,30 @@ wlb_pointer_set_focus(struct wlb_pointer *pointer, struct wlb_output *output);
 void
 wlb_pointer_update_focus(struct wlb_pointer *pointer);
 
+struct wlb_finger {
+	struct wl_list link;
+	int32_t id;
+
+	struct wlb_output *output;
+
+	struct wlb_surface *focus;
+	struct wl_listener focus_destroy;
+
+	wl_fixed_t sx, sy;
+};
+
+struct wlb_touch {
+	struct wlb_seat *seat;
+
+	struct wl_list resource_list;
+
+	struct wl_list finger_list;
+};
+
+void
+wlb_touch_create_resource(struct wlb_touch *touch,
+			  struct wl_client *client, uint32_t id);
+
 struct wlb_keyboard {
 	struct wlb_seat *seat;
 
@@ -242,6 +266,7 @@ struct wlb_seat {
 
 	struct wlb_pointer *pointer;
 	struct wlb_keyboard *keyboard;
+	struct wlb_touch *touch;
 };
 
 void

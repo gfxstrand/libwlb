@@ -254,6 +254,23 @@ wlb_pointer_move_on_output(struct wlb_pointer *pointer, uint32_t time,
 WL_EXPORT void
 wlb_pointer_leave_output(struct wlb_pointer *pointer);
 
+WL_EXPORT struct wlb_touch *
+wlb_touch_create(struct wlb_seat *seat);
+WL_EXPORT void
+wlb_touch_destroy(struct wlb_touch *touch);
+WL_EXPORT int
+wlb_touch_down_on_output(struct wlb_touch *touch, uint32_t time, int32_t id,
+			 struct wlb_output *output, wl_fixed_t x, wl_fixed_t y);
+WL_EXPORT int
+wlb_touch_move_on_output(struct wlb_touch *touch, int32_t id,
+			 struct wlb_output *output, wl_fixed_t x, wl_fixed_t y);
+WL_EXPORT void
+wlb_touch_finish_frame(struct wlb_touch *touch, uint32_t time);
+WL_EXPORT void
+wlb_touch_up(struct wlb_touch *touch, uint32_t time, int32_t id);
+WL_EXPORT void
+wlb_touch_cancel(struct wlb_touch *touch);
+
 struct wlb_gles2_renderer;
 WL_EXPORT struct wlb_gles2_renderer *
 wlb_gles2_renderer_create(struct wlb_compositor *c);

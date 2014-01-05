@@ -52,6 +52,12 @@ static void
 seat_get_touch(struct wl_client *client, struct wl_resource *resource,
 	       uint32_t id)
 {
+	struct wlb_seat *seat = wl_resource_get_user_data(resource);
+
+	if (!seat->touch)
+		return;
+
+	wlb_touch_create_resource(seat->touch, client, id);
 }
 
 struct wl_seat_interface seat_interface = {
@@ -78,6 +84,8 @@ seat_bind(struct wl_client *client,
 
 	wl_list_insert(&seat->resource_list, wl_resource_get_link(resource));
 
+	if (seat->touch)
+		capabilities |= WL_SEAT_CAPABILITY_TOUCH;
 	if (seat->keyboard)
 		capabilities |= WL_SEAT_CAPABILITY_KEYBOARD;
 	if (seat->pointer)
@@ -123,6 +131,8 @@ wlb_seat_destroy(struct wlb_seat *seat)
 		wlb_keyboard_destroy(seat->keyboard);
 	if (seat->pointer)
 		wlb_pointer_destroy(seat->pointer);
+	if (seat->touch)
+		wlb_touch_destroy(seat->touch);
 
 	free(seat);
 }
@@ -133,6 +143,8 @@ wlb_seat_send_capabilities(struct wlb_seat *seat)
 	struct wl_resource *resource;
 	uint32_t capabilities = 0;
 
+	if (seat->touch)
+		capabilities |= WL_SEAT_CAPABILITY_TOUCH;
 	if (seat->keyboard)
 		capabilities |= WL_SEAT_CAPABILITY_KEYBOARD;
 	if (seat->pointer)
