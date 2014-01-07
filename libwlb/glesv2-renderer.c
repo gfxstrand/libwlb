@@ -398,7 +398,8 @@ gles2_surface_get(struct wlb_gles2_renderer *gr, struct wlb_surface *surface)
 	gs = zalloc(sizeof *gs);
 	if (!gs)
 		return NULL;
-	
+
+	gs->renderer = gr;
 	gs->surface = surface;
 	gs->destroy_listener.notify = surface_destroy_handler;
 	wlb_surface_add_destroy_listener(surface, &gs->destroy_listener);
