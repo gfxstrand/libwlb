@@ -125,8 +125,9 @@ wlb_pointer_set_focus(struct wlb_pointer *pointer, struct wlb_output *output)
 	uint32_t serial;
 	wl_fixed_t sx, sy;
 
-	if (output == pointer->focus &&
-	    output->surface.surface == pointer->focus_surface)
+	if ((output == NULL && pointer->focus == NULL) ||
+	    (output != NULL && output == pointer->focus &&
+	     output->surface.surface == pointer->focus_surface))
 		return;
 
 	serial = wl_display_next_serial(pointer->seat->compositor->display);
