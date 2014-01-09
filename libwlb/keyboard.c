@@ -206,6 +206,8 @@ wlb_keyboard_key(struct wlb_keyboard *keyboard, uint32_t time,
 	struct wl_resource *resource;
 	uint32_t serial, *k, *end;
 
+	keyboard_ensure_focus(keyboard);
+
 	end = keyboard->keys.data + keyboard->keys.size;
 	for (k = keyboard->keys.data; k < end; k++) {
 		if (*k == key) {
@@ -220,8 +222,6 @@ wlb_keyboard_key(struct wlb_keyboard *keyboard, uint32_t time,
 		k = wl_array_add(&keyboard->keys, sizeof *k);
 		*k = key;
 	}
-
-	keyboard_ensure_focus(keyboard);
 
 	if (!keyboard->focus || wl_list_empty(&keyboard->resource_list))
 		return;
