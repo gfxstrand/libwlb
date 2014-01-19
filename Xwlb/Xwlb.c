@@ -1114,6 +1114,8 @@ x11_output_repaint(void *data)
 	struct x11_output *output = data;
 	struct x11_compositor *c = output->compositor;
 
+	wlb_output_prepare_frame(output->output);
+
 	if (c->gles2_renderer) {
 		wlb_gles2_renderer_repaint_output(c->gles2_renderer,
 						  output->output);
@@ -1123,7 +1125,7 @@ x11_output_repaint(void *data)
 
 	wl_event_source_timer_update(output->repaint_timer, 10);
 
-	wlb_output_repaint_complete(output->output, x11_compositor_get_time());
+	wlb_output_frame_complete(output->output, x11_compositor_get_time());
 }
 
 struct x11_output *

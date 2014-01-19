@@ -121,6 +121,7 @@ wlb_output_create(struct wlb_compositor *compositor, int32_t width,
 	wl_list_init(&output->mode_list);
 
 	pixman_region32_init(&output->damage);
+	wl_list_init(&output->pending_frame_callbacks);
 
 	return output;
 
@@ -272,19 +273,32 @@ wlb_output_needs_repaint(struct wlb_output *output)
 }
 
 WL_EXPORT void
-wlb_output_repaint_complete(struct wlb_output *output, uint32_t time)
+wlb_output_prepare_frame(struct wlb_output *output)
 {
-	/* Clear damage */
-	pixman_region32_fini(&output->damage);
-	pixman_region32_init(&output->damage);
-
 	if (!output->surface.surface)
 		return;
 
 	if (output->surface.surface->primary_output != output)
 		return;
 
-	wlb_surface_post_frame_callbacks(output->surface.surface, time);
+	wl_list_insert_list(&output->pending_frame_callbacks,
+			    &output->surface.surface->frame_callbacks);
+	wl_list_init(&output->surface.surface->frame_callbacks);
+}
+
+WL_EXPORT void
+wlb_output_frame_complete(struct wlb_output *output, uint32_t time)
+{
+	struct wlb_callback *callback, *next;
+
+	/* Clear damage */
+	pixman_region32_fini(&output->damage);
+	pixman_region32_init(&output->damage);
+
+	wl_list_for_each_safe(callback, next,
+			      &output->pending_frame_callbacks, link)
+		wlb_callback_notify(callback, time);
+	wl_display_flush_clients(output->compositor->display);
 }
 
 WL_EXPORT struct wlb_surface *

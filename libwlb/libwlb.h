@@ -175,7 +175,9 @@ wlb_output_set_preferred_mode(struct wlb_output *output,
 WL_EXPORT int
 wlb_output_needs_repaint(struct wlb_output *output);
 WL_EXPORT void
-wlb_output_repaint_complete(struct wlb_output *output, uint32_t time);
+wlb_output_prepare_frame(struct wlb_output *output);
+WL_EXPORT void
+wlb_output_frame_complete(struct wlb_output *output, uint32_t time);
 WL_EXPORT struct wlb_surface *
 wlb_output_surface(struct wlb_output *output);
 WL_EXPORT void

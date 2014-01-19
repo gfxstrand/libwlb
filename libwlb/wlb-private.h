@@ -123,6 +123,7 @@ struct wlb_output {
 	} surface;
 
 	pixman_region32_t damage;
+	struct wl_list pending_frame_callbacks;
 };
 
 void
@@ -151,6 +152,9 @@ struct wlb_callback {
 	struct wl_resource *resource;
 	struct wl_list link;
 };
+
+void
+wlb_callback_notify(struct wlb_callback *callback, uint32_t serial);
 
 struct wlb_surface {
 	struct wlb_compositor *compositor;
@@ -187,8 +191,6 @@ void
 wlb_surface_destroy(struct wlb_surface *surface);
 void
 wlb_surface_compute_primary_output(struct wlb_surface *surface);
-void
-wlb_surface_post_frame_callbacks(struct wlb_surface *surface, uint32_t time);
 
 struct wlb_pointer {
 	struct wlb_seat *seat;
