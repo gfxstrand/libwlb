@@ -208,6 +208,8 @@ surface_commit(struct wl_client *client, struct wl_resource *resource)
 	wl_list_insert_list(&surface->frame_callbacks,
 			    &surface->pending.frame_callbacks);
 	wl_list_init(&surface->pending.frame_callbacks);
+
+	wl_signal_emit(&surface->commit_signal, surface);
 }
 
 static const struct wl_surface_interface surface_interface = {
@@ -276,6 +278,7 @@ wlb_surface_create(struct wlb_compositor *compositor,
 		return NULL;
 	}
 
+	wl_signal_init(&surface->commit_signal);
 	wl_list_init(&surface->output_list);
 
 	surface->pending.buffer_destroy_listener.notify =

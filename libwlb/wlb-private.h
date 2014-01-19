@@ -117,8 +117,12 @@ struct wlb_output {
 		enum wl_fullscreen_shell_present_method present_method;
 		uint32_t present_refresh;
 
+		struct wl_listener commit_listener;
+
 		struct wlb_rectangle position;
 	} surface;
+
+	pixman_region32_t damage;
 };
 
 void
@@ -151,6 +155,7 @@ struct wlb_callback {
 struct wlb_surface {
 	struct wlb_compositor *compositor;
 	struct wl_resource *resource;
+	struct wl_signal commit_signal;
 
 	struct wl_list output_list;
 	struct wlb_output *primary_output;

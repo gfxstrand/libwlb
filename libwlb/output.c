@@ -120,6 +120,8 @@ wlb_output_create(struct wlb_compositor *compositor, int32_t width,
 
 	wl_list_init(&output->mode_list);
 
+	pixman_region32_init(&output->damage);
+
 	return output;
 
 err_output:
@@ -237,6 +239,11 @@ wlb_output_set_mode(struct wlb_output *output,
 
 	output->current_mode = mode;
 
+	pixman_region32_fini(&output->damage);
+	pixman_region32_init_rect(&output->damage, 0, 0,
+				  mode->width, mode->height);
+	wlb_output_recompute_surface_position(output);
+
 	wl_resource_for_each(resource, &output->resource_list)
 		output_send_mode(output, resource, mode);
 }
@@ -261,12 +268,16 @@ wlb_output_set_preferred_mode(struct wlb_output *output,
 WL_EXPORT int
 wlb_output_needs_repaint(struct wlb_output *output)
 {
-	return 1;
+	return pixman_region32_not_empty(&output->damage);
 }
 
 WL_EXPORT void
 wlb_output_repaint_complete(struct wlb_output *output, uint32_t time)
 {
+	/* Clear damage */
+	pixman_region32_fini(&output->damage);
+	pixman_region32_init(&output->damage);
+
 	if (!output->surface.surface)
 		return;
 
@@ -302,6 +313,43 @@ wlb_output_present_method(struct wlb_output *output)
 	return output->surface.present_method;
 }
 
+static void
+surface_committed(struct wl_listener *listener, void *data)
+{
+	struct wlb_output *output;
+	pixman_box32_t *srects, *orects;
+	pixman_region32_t odamage;
+	int i, nrects;
+	int32_t x, y, ow, oh, sw, sh;
+
+	output = wl_container_of(listener, output, surface.commit_listener);
+
+	srects = pixman_region32_rectangles(&output->surface.surface->damage,
+					    &nrects);
+	orects = malloc(nrects * sizeof(*orects));
+	if (!orects)
+		return;
+
+	x = output->surface.position.x;
+	y = output->surface.position.y;
+	ow = output->surface.position.width;
+	oh = output->surface.position.height;
+	sw = output->surface.surface->width;
+	sh = output->surface.surface->height;
+
+	for (i = 0; i < nrects; ++i) {
+		orects[i].x1 = x + (srects[i].x1 * ow) / sw;
+		orects[i].y1 = y + (srects[i].y1 * ow) / sw;
+		orects[i].x2 = x + (srects[i].x2 * ow + sw - 1) / sw;
+		orects[i].y2 = y + (srects[i].y2 * ow + sw - 1) / sw;
+	}
+
+	pixman_region32_init_rects(&odamage, orects, nrects);
+	free(orects);
+	pixman_region32_union(&output->damage, &output->damage, &odamage);
+	pixman_region32_fini(&odamage);
+}
+
 void
 wlb_output_present_surface(struct wlb_output *output,
 			   struct wlb_surface *surface,
@@ -310,6 +358,7 @@ wlb_output_present_surface(struct wlb_output *output,
 {
 	if (output->surface.surface) {
 		wl_list_remove(&output->surface.link);
+		wl_list_remove(&output->surface.commit_listener.link);
 		wlb_surface_compute_primary_output(output->surface.surface);
 	}
 
@@ -317,34 +366,35 @@ wlb_output_present_surface(struct wlb_output *output,
 	output->surface.present_method = method;
 	output->surface.present_refresh = framerate;
 
+	/* Damage where the surface was */
+	pixman_region32_union_rect(&output->damage, &output->damage,
+				   output->surface.position.x,
+				   output->surface.position.y,
+				   output->surface.position.width,
+				   output->surface.position.height);
 	if (surface) {
 		wlb_output_recompute_surface_position(output);
 		wl_list_insert(&surface->output_list, &output->surface.link);
-		wlb_surface_compute_primary_output(output->surface.surface);
+		output->surface.commit_listener.notify = surface_committed;
+		wl_signal_add(&surface->commit_signal,
+			      &output->surface.commit_listener);
 	}
+	/* Damage where the surface is now */
+	pixman_region32_union_rect(&output->damage, &output->damage,
+				   output->surface.position.x,
+				   output->surface.position.y,
+				   output->surface.position.width,
+				   output->surface.position.height);
 }
 
-void
-wlb_output_recompute_surface_position(struct wlb_output *output)
+static void
+wlb_output_default_surface_position(struct wlb_output *output,
+				    struct wlb_rectangle *position)
 {
 	int32_t ow, oh, sw, sh;
-	struct wlb_rectangle fpos;
-
-	assert(output->current_mode);
-	assert(output->surface.surface);
 
 	sw = output->surface.surface->width;
 	sh = output->surface.surface->height;
-
-	if (sw <= 0 || sh <= 0)
-		return;
-	
-	if (WLB_HAS_FUNC(output, place_surface) &&
-	    WLB_CALL_FUNC(output, place_surface, output->surface.surface,
-			  output->surface.present_method, &fpos) > 0) {
-		output->surface.position = fpos;
-		return;
-	}
 
 	ow = output->current_mode->width;
 	oh = output->current_mode->height;
@@ -352,19 +402,15 @@ wlb_output_recompute_surface_position(struct wlb_output *output)
 	switch(output->surface.present_method) {
 	case WL_FULLSCREEN_SHELL_PRESENT_METHOD_SCALE:
 		if (ow / sw <= oh / sh) {
-			output->surface.position.width = ow;
-			output->surface.position.height =
-				(sh * (int64_t)ow) / sw;
-			output->surface.position.x = 0;
-			output->surface.position.y =
-				(oh - output->surface.position.height) / 2;
+			position->width = ow;
+			position->height = (sh * (int64_t)ow) / sw;
+			position->x = 0;
+			position->y = (oh - position->height) / 2;
 		} else {
-			output->surface.position.width =
-				(sw * (int64_t)oh) / sh;
-			output->surface.position.height = oh;
-			output->surface.position.x =
-				(ow - output->surface.position.width) / 2;
-			output->surface.position.y = 0;
+			position->width = (sw * (int64_t)oh) / sh;
+			position->height = oh;
+			position->x = (ow - position->width) / 2;
+			position->y = 0;
 		}
 
 		break;
@@ -373,21 +419,63 @@ wlb_output_recompute_surface_position(struct wlb_output *output)
 		if (WLB_HAS_FUNC(output, switch_mode) &&
 		    WLB_CALL_FUNC(output, switch_mode, sw, sh,
 				  output->surface.present_refresh)) {
-			output->surface.position.x = 0;
-			output->surface.position.y = 0;
-			output->surface.position.width = sw;
-			output->surface.position.height = sh;
+			position->x = 0;
+			position->y = 0;
+			position->width = sw;
+			position->height = sh;
 			break;
 		}
 	case WL_FULLSCREEN_SHELL_PRESENT_METHOD_FILL:
-		output->surface.position.x = (ow - sw) / 2;
-		output->surface.position.y = (oh - sh) / 2;
-		output->surface.position.width = sw;
-		output->surface.position.height = sh;
+		position->x = (ow - sw) / 2;
+		position->y = (oh - sh) / 2;
+		position->width = sw;
+		position->height = sh;
 		break;
 	}
+}
 
-	wlb_surface_compute_primary_output(output->surface.surface);
+void
+wlb_output_recompute_surface_position(struct wlb_output *output)
+{
+	struct wlb_rectangle pos;
+	int ret;
+	assert(output->current_mode);
+
+	if (!output->surface.surface) {
+		pos.x = 0;
+		pos.y = 0;
+		pos.width = 0;
+		pos.height = 0;
+		goto done;
+	}
+
+	if (WLB_HAS_FUNC(output, place_surface)) {
+		ret = WLB_CALL_FUNC(output, place_surface,
+				    output->surface.surface,
+				    output->surface.present_method, &pos);
+		if (ret > 0)
+			goto done;
+	}
+
+	wlb_output_default_surface_position(output, &pos);
+
+done:
+	if (pos.x != output->surface.position.x ||
+	    pos.y != output->surface.position.y ||
+	    pos.width != output->surface.position.width ||
+	    pos.height != output->surface.position.height) {
+		pixman_region32_union_rect(&output->damage, &output->damage,
+					   output->surface.position.x,
+					   output->surface.position.y,
+					   output->surface.position.width,
+					   output->surface.position.height);
+		output->surface.position = pos;
+		pixman_region32_union_rect(&output->damage, &output->damage,
+					   pos.x, pos.y, pos.width, pos.height);
+	}
+
+	if (output->surface.surface)
+		wlb_surface_compute_primary_output(output->surface.surface);
 }
 
 void
