@@ -88,16 +88,16 @@ struct gles2_output {
 struct wlb_gles2_renderer {
 	struct wlb_compositor *compositor;
 
-    /* Every surface is placed in one of the following two lists.  The
-     * first is for active surfaces.  The second is for surfaces that have
-     * been removed by the client.  These surfaces will be destroyed in the
-     * next repaint.  This way we ensure that destruction of the surface
-     * occurs inside of the correct OpenGL context
-     */
+	/* Every surface is placed in one of the following two lists.  The
+	 * first is for active surfaces.  The second is for surfaces that have
+	 * been removed by the client.  These surfaces will be destroyed in the
+	 * next repaint.  This way we ensure that destruction of the surface
+	 * occurs inside of the correct OpenGL context
+	 */
 	struct wl_list surface_list;
 	struct wl_list surface_cleanup_list;
 
-    /* List of outputs */
+	/* List of outputs */
 	struct wl_list output_list;
 
 	struct wlb_matrix output_mat;
@@ -233,6 +233,7 @@ gles2_shader_destroy(struct gles2_shader *shader, int cleanup_gl)
 		glDeleteShader(shader->fshader);
 	}
 
+	wl_list_remove(&shader->link);
 	free(shader);
 }
 
@@ -253,6 +254,8 @@ gles2_shader_get_for_source(struct wlb_gles2_renderer *r, GLsizei count,
 	if (!shader)
 		return NULL;
 	
+	wl_list_init(&shader->link);
+
 	shader->fshader = shader_from_source(GL_FRAGMENT_SHADER, count, source);
 	if (!shader->fshader)
 		goto err_alloc;
@@ -781,11 +784,16 @@ wlb_gles2_renderer_destroy(struct wlb_gles2_renderer *gr)
 
 	wl_list_for_each_safe(surface, sunext, &gr->surface_list, link)
 		gles2_surface_destroy(surface, cleanup_gl);
+	wl_list_for_each_safe(surface, sunext, &gr->surface_cleanup_list, link)
+		gles2_surface_destroy(surface, cleanup_gl);
 
 	wl_list_for_each_safe(output, onext, &gr->output_list, link)
 		gles2_output_destroy(output);
 
-	gles2_shader_destroy(gr->solid_shader, cleanup_gl);
+	wl_array_release(&gr->vertices);
+
+	if (gr->solid_shader)
+		gles2_shader_destroy(gr->solid_shader, cleanup_gl);
 	wl_list_for_each_safe(shader, shnext, &gr->shm_format_shader_list, link)
 		gles2_shader_destroy(shader, cleanup_gl);
 	wl_list_for_each_safe(shader, shnext, &gr->buffer_type_shader_list, link)
