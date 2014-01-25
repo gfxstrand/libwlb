@@ -151,8 +151,10 @@ wlb_output_destroy(struct wlb_output *output)
 		free(mode);
 	}
 
-	if (output->surface.surface)
+	if (output->surface.surface) {
 		wl_list_remove(&output->surface.link);
+		wl_list_remove(&output->surface.commit_listener.link);
+	}
 
 	wl_global_destroy(output->global);
 	wl_resource_for_each_safe(resource, next_res, &output->resource_list)

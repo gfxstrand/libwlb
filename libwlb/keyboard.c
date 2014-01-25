@@ -71,6 +71,9 @@ wlb_keyboard_destroy(struct wlb_keyboard *keyboard)
 	wl_resource_for_each_safe(resource, rnext, &keyboard->resource_list)
 		wl_resource_destroy(resource);
 	
+	if (keyboard->focus)
+		wl_list_remove(&keyboard->surface_destroy_listener.link);
+
 	keyboard->seat->keyboard = NULL;
 	
 	if (keyboard->keymap.data) {

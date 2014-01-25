@@ -131,6 +131,14 @@ wlb_touch_down_on_output(struct wlb_touch *touch, uint32_t time, int32_t id,
 	return 0;
 }
 
+static void
+wlb_finger_destroy(struct wlb_finger *finger)
+{
+	wl_list_remove(&finger->focus_destroy.link);
+	wl_list_remove(&finger->link);
+	free(finger);
+}
+
 static struct wlb_finger *
 wlb_touch_find_finger(struct wlb_touch *touch, int32_t id)
 {
@@ -197,8 +205,7 @@ wlb_touch_up(struct wlb_touch *touch, uint32_t time, int32_t id)
 	wl_resource_for_each(resource, &touch->resource_list)
 		wl_touch_send_up(resource, serial, time, id);
 	
-	wl_list_remove(&finger->link);
-	free(finger);
+	wlb_finger_destroy(finger);
 }
 
 WL_EXPORT void
@@ -210,9 +217,7 @@ wlb_touch_cancel(struct wlb_touch *touch)
 	wl_resource_for_each(resource, &touch->resource_list)
 		wl_touch_send_cancel(resource);
 	
-	wl_list_for_each_safe(finger, fnext, &touch->finger_list, link) {
-		wl_list_remove(&finger->link);
-		free(finger);
-	}
+	wl_list_for_each_safe(finger, fnext, &touch->finger_list, link)
+		wlb_finger_destroy(finger);
 }
 

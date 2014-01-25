@@ -71,7 +71,12 @@ wlb_pointer_destroy(struct wlb_pointer *pointer)
 
 	wl_resource_for_each_safe(resource, rnext, &pointer->resource_list)
 		wl_resource_destroy(resource);
-	
+
+	if (pointer->focus) {
+		wl_list_remove(&pointer->surface_destroy_listener.link);
+		wl_list_remove(&pointer->output_destroy_listener.link);
+	}
+
 	pointer->seat->pointer = NULL;
 
 	free(pointer);
