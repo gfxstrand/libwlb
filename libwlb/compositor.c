@@ -281,8 +281,6 @@ wlb_compositor_destroy(struct wlb_compositor *comp)
 		wl_list_remove(&item->link);
 		free(item);
 	}
-	
-	wl_display_destroy(comp->display);
 
 	free(comp);
 }
