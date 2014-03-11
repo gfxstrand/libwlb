@@ -159,6 +159,7 @@ wlb_callback_notify(struct wlb_callback *callback, uint32_t serial);
 struct wlb_surface {
 	struct wlb_compositor *compositor;
 	struct wl_resource *resource;
+	struct wl_signal destroy_signal;
 	struct wl_signal commit_signal;
 
 	struct wl_list output_list;

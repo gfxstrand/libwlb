@@ -234,6 +234,8 @@ wlb_surface_destroy(struct wlb_surface *surface)
 	struct wlb_callback *callback, *cnext;
 	struct wlb_output *output, *onext;
 
+	wl_signal_emit(&surface->destroy_signal, surface);
+
 	wl_list_for_each_safe(output, onext, &surface->output_list, surface.link)
 		wlb_output_present_surface(output, NULL, 0, 0);
 
