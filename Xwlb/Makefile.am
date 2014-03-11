@@ -1,7 +1,7 @@
 bin_PROGRAMS = Xwlb
 
 Xwlb_CFLAGS = $(X11_BACKEND_CFLAGS)
-Xwlb_LDADD = $(X11_BACKEND_LIBS) ../libwlb/libwlb.la ../../weston/shared/libshared.la
+Xwlb_LDADD = $(X11_BACKEND_LIBS) ../libwlb/libwlb.la ../../weston/libshared.la
 Xwlb_SOURCES = Xwlb.c
 
 AM_CPPFLAGS = $(WAYLAND_CFLAGS) $(PIXMAN_CFLAGS)
