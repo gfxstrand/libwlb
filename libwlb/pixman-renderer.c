@@ -133,7 +133,6 @@ wlb_output_pixman_composite(struct wlb_output *output, pixman_image_t *image)
 	pixman_image_set_transform(image, &transform);
 
 	if (output->surface.surface && output->surface.surface->buffer) {
-		wlb_output_recompute_surface_position(output);
 		pixman_region32_init_rect(&surface_damage,
 					  output->surface.position.x,
 					  output->surface.position.y,
