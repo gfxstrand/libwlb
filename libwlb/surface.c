@@ -272,6 +272,7 @@ wlb_surface_create(struct wlb_compositor *compositor,
 		return NULL;
 
 	surface->compositor = compositor;
+	wl_signal_init(&surface->destroy_signal);
 
 	surface->resource =
 		wl_resource_create(client, &wl_surface_interface, 1, id);
