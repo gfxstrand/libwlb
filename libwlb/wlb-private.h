@@ -118,7 +118,7 @@ struct wlb_output {
 		enum wl_fullscreen_shell_present_method present_method;
 		uint32_t present_refresh;
 
-		struct wl_listener commit_listener;
+		struct wl_listener committed;
 
 		struct wlb_rectangle position;
 	} surface;

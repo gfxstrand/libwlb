@@ -154,7 +154,7 @@ wlb_output_destroy(struct wlb_output *output)
 
 	if (output->surface.surface) {
 		wl_list_remove(&output->surface.link);
-		wl_list_remove(&output->surface.commit_listener.link);
+		wl_list_remove(&output->surface.committed.link);
 	}
 
 	wl_global_destroy(output->global);
@@ -333,7 +333,7 @@ wlb_output_present_method(struct wlb_output *output)
 }
 
 static void
-surface_committed(struct wl_listener *listener, void *data)
+output_surface_committed(struct wl_listener *listener, void *data)
 {
 	struct wlb_output *output;
 	pixman_box32_t *srects, *orects;
@@ -341,7 +341,7 @@ surface_committed(struct wl_listener *listener, void *data)
 	int i, nrects;
 	int32_t x, y, ow, oh, sw, sh;
 
-	output = wl_container_of(listener, output, surface.commit_listener);
+	output = wl_container_of(listener, output, surface.committed);
 
 	srects = pixman_region32_rectangles(&output->surface.surface->damage,
 					    &nrects);
@@ -358,9 +358,9 @@ surface_committed(struct wl_listener *listener, void *data)
 
 	for (i = 0; i < nrects; ++i) {
 		orects[i].x1 = x + (srects[i].x1 * ow) / sw;
-		orects[i].y1 = y + (srects[i].y1 * ow) / sw;
+		orects[i].y1 = y + (srects[i].y1 * oh) / sh;
 		orects[i].x2 = x + (srects[i].x2 * ow + sw - 1) / sw;
-		orects[i].y2 = y + (srects[i].y2 * ow + sw - 1) / sw;
+		orects[i].y2 = y + (srects[i].y2 * oh + sh - 1) / sh;
 	}
 
 	pixman_region32_init_rects(&odamage, orects, nrects);
@@ -377,7 +377,7 @@ wlb_output_present_surface(struct wlb_output *output,
 {
 	if (output->surface.surface) {
 		wl_list_remove(&output->surface.link);
-		wl_list_remove(&output->surface.commit_listener.link);
+		wl_list_remove(&output->surface.committed.link);
 		wlb_surface_compute_primary_output(output->surface.surface);
 	}
 
@@ -394,9 +394,9 @@ wlb_output_present_surface(struct wlb_output *output,
 	if (surface) {
 		wlb_output_recompute_surface_position(output);
 		wl_list_insert(&surface->output_list, &output->surface.link);
-		output->surface.commit_listener.notify = surface_committed;
+		output->surface.committed.notify = output_surface_committed;
 		wl_signal_add(&surface->commit_signal,
-			      &output->surface.commit_listener);
+			      &output->surface.committed);
 	}
 	/* Damage where the surface is now */
 	pixman_region32_union_rect(&output->damage, &output->damage,
