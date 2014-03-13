@@ -139,51 +139,6 @@ compositor_bind(struct wl_client *client,
 				       comp, NULL);
 }
 
-static void
-shell_present_surface(struct wl_client *client, struct wl_resource *resource,
-		      struct wl_resource *surface_res, uint32_t method,
-		      uint32_t framerate, struct wl_resource *output_res)
-{
-	struct wlb_compositor *comp = wl_resource_get_user_data(resource);
-	struct wlb_surface *surface = NULL;
-	struct wlb_output *output = NULL;
-
-	if (surface_res)
-		surface = wl_resource_get_user_data(surface_res);
-	if (output_res)
-		output = wl_resource_get_user_data(output_res);
-	
-	if (output) {
-		wlb_output_present_surface(output, surface, method, framerate);
-	} else {
-		wl_list_for_each(output, &comp->output_list, compositor_link)
-			wlb_output_present_surface(output, surface,
-						   method, framerate);
-	}
-}
-
-static const struct wl_fullscreen_shell_interface fullscreen_shell_interface = {
-	shell_present_surface
-};
-
-static void
-fullscreen_shell_bind(struct wl_client *client,
-		      void *data, uint32_t version, uint32_t id)
-{
-	struct wlb_compositor *comp = data;
-	struct wl_resource *resource;
-
-	resource = wl_resource_create(client, &wl_fullscreen_shell_interface,
-				      1, id);
-	if (!resource) {
-		wl_client_post_no_memory(client);
-		return;
-	}
-
-	wl_resource_set_implementation(resource, &fullscreen_shell_interface,
-				       comp, NULL);
-}
-
 static int
 shm_buffer_is_type(void *data, struct wl_resource *buffer)
 {
@@ -251,9 +206,6 @@ wlb_compositor_create(struct wl_display *display)
 			      comp, compositor_bind))
 		goto err_alloc;
 
-	if (!wl_global_create(display, &wl_fullscreen_shell_interface, 1,
-			      comp, fullscreen_shell_bind))
-		goto err_alloc;
 	
 	wlb_compositor_add_buffer_type(comp, &shm_buffer_type, NULL);
 
