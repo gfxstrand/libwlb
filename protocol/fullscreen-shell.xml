@@ -3,8 +3,39 @@
     <description summary="Displays a single surface per output">
       Displays a single surface per output.
 
-      This interface can only be bound to by one client at a time.
+      This interface provides a mechanism for a single client to display
+      simple full-screen surfaces.  While there technically may be multiple
+      clients bound to this interface, only one of those clients should be
+      shown at a time.
+
+      To present a surface, the client uses either the present_surface or
+      present_surface_for_mode requests.  Presenting a surface takes effect
+      on the next wl_surface.commit.  See the individual requests for
+      details about scaling and mode switches.
+      
+      The client can have at most one surface per output at any time.
+      Requesting a surface be presented on an output that already has a
+      surface replaces the previously presented surface.  Presenting a null
+      surface removes its content and effectively disables the output.
+      Exactly what happens when an output is "disabled" is
+      compositor-specific.  The same surface may be presented multiple
+      outputs simultaneously.
+
+      Once a surface is presented on an output, it stays on that output
+      until either the client removes it or the compositor destroys the
+      output.  This way, the client can update the output's contents by
+      simply attaching a new buffer.
     </description>
+
+    <request name="release" type="destructor">
+      <description summary="release the wl_fullscreen_shell interface">
+      	Release the binding from the wl_fullscreen_shell interface
+
+	This destroys the server-side object and frees this binding.  If
+	the client binds to wl_fullscreen_shell multiple times, it may wish
+	to free some of those bindings.
+      </description>
+    </request>
 
     <enum name="present_method">
       <description summary="different method to set the surface fullscreen">
@@ -13,23 +44,15 @@
 	output. The compositor is free to ignore this parameter.
       </description>
       <entry name="default" value="0" summary="no preference, apply default policy"/>
-      <entry name="scale" value="1" summary="scale, preserve the surface's aspect ratio and center on output"/>
-      <entry name="driver" value="2" summary="switch output mode to the smallest mode that can fit the surface, add black borders to compensate size mismatch"/>
-      <entry name="fill" value="3" summary="no upscaling, center on output and add black borders to compensate size mismatch"/>
+      <entry name="center" value="1" summary="center the surface on the output"/>
+      <entry name="zoom" value="2" summary="scale the surface, preserving aspect ratio, to the largest size that will fit on the output" />
+      <entry name="zoom_crop" value="3" summary="scale the surface, preserving aspect ratio, to fully fill the output cropping if needed" />
+      <entry name="stretch" value="4" summary="scale the surface to the size of the output ignoring aspect ratio" />
     </enum>
 
     <request name="present_surface">
       <description summary="present surface for display">
 	Present a surface on the given output.
-
-	This requests the fullscreen shell to display the given surface on
-	the given output.  Each client of the fullscreen shell can have at
-	most one surface per output at any one time.  Subsequent requests
-	with the same output replace the surface bound to that output.
-	Setting a null surface on an output effectively disables that
-	output for whatever definition of "disables" applies to the
-	implementaiton.  The same surface may be presented on multiple
-	outputs.
 
 	If the output is null, the compositor will present the surface on
 	whatever display (or displays) it thinks best.  In particular, this
@@ -37,25 +60,99 @@
 	not be used in combination with placing surfaces on specific
 	outputs.
 
-	The method specifies how the surface is to be persented.  In
-	particular, this instructs the compositor how to handle a size
-	mismatch between the presented surface and the output.
+	The method parameter is a hint to the compositor for how the surface
+	is to be presented.  In particular, it tells the compostior how to
+	handle a size mismatch between the presented surface and the
+	output.  The compositor is free to ignore this parameter.
 
-	The framerate parameter is used only when the method is set
-	to "driver", to indicate the preferred framerate. A value of 0
-	indicates that the app does not care about framerate.  The
-	framerate is specified in mHz, that is framerate of 60000 is 60Hz.
-
-	A method of "scale" or "driver" implies a scaling operation of
-	the surface, either via a direct scaling operation or a change of
-	the output mode. This will override any kind of output scaling, so
-	that mapping a surface with a buffer size equal to the mode can
-	fill the screen independent of buffer_scale.
+	The "zoom", "zoom_crop", and "stretch" methods imply a scaling
+	operation on the surface.  This will override any kind of output
+	scaling, so the buffer_scale property of the surface is effectively
+	ignored.
       </description>
-      <arg name="surface" type="object" interface="wl_surface"/>
+      <arg name="surface" type="object" interface="wl_surface" allow-null="true"/>
       <arg name="method" type="uint"/>
-      <arg name="framerate" type="uint"/>
       <arg name="output" type="object" interface="wl_output" allow-null="true"/>
     </request>
+
+    <request name="present_surface_for_mode">
+      <description summary="present surface for display at a particular mode">
+	Presents a surface on the given output for a particular mode.
+
+	If the current size of the output differs from that of the surface,
+	the compositor will attempt to change the size of the output to
+	match the surface.  The result of the mode-swith operation will be
+	returned via the provided wl_fullscreen_shell_mode_feedback object.
+
+	If the current output mode matches the one requested or if the
+	compositor successfully switches the mode to match the surface,
+	then the mode_successfull event will be sent and the output will
+	contain the contents of the given surface.  If the compositor
+	cannot match the output size to the surface size, the mode_failed
+	will be sent and the output will contain the contents of the
+	previously presented surface (if any).  If another surface is
+	presented on the given output before either of these has a chance
+	to happen, the present_canceled event will be sent.
+
+	If the size of the presented surface changes, the resulting output
+	is undefined.  The compositor may attempt to change the output mode
+	to compensate.  However, there is no guarantee that a suitable mode
+	will be found and the client has no way to be notified of success
+	or failure.
+
+	The framerate parameter specifies the target framerate for the
+	output.  The compositor is free to ignore this parameter.  A value
+	of 0 indicates that the client has no preference.
+
+	If the surface has a buffer_scale greater than 1, the compositor
+	may choose a mode that matches either the buffer size or the
+	surface size.  In either case, the surface will fill the output.
+      </description>
+      <arg name="surface" type="object" interface="wl_surface"/>
+      <arg name="output" type="object" interface="wl_output"/>
+      <arg name="framerate" type="int"/>
+      <arg name="feedback" type="new_id" interface="wl_fullscreen_shell_mode_feedback"/>
+    </request>
+
+    <enum name="error">
+      <description summary="wl_fullscreen_shell error values">
+	These errors can be emitted in response to wl_fullscreen_shell requests
+      </description>
+      <entry name="invalid_method" value="0" summary="present_method is not known"/>
+    </enum>
+  </interface>
+
+  <interface name="wl_fullscreen_shell_mode_feedback" version="1">
+    <event name="mode_successful">
+      <description summary="mode switch succeeded">
+	This event indicates that the attempted mode switch operation was
+	successful.  A surface of the size requested in the mode switch
+	will fill the output without scaling.
+
+	Upon recieving this event, the client should destroy the
+	wl_fullscreen_shell_mode_feedback object.
+      </description>
+    </event>
+    <event name="mode_failed">
+      <description summary="mode switch failed">
+	This event indicates that the attempted mode switch operation
+	failed. This may be because the requested output mode is not
+	possible or it may mean that the compositor does not want to allow
+	mode switches at this time.
+
+	Upon recieving this event, the client should destroy the
+	wl_fullscreen_shell_mode_feedback object.
+      </description>
+    </event>
+    <event name="present_canceled">
+      <description summary="mode switch canceled">
+	This event indicates that the attempted mode switch operation was
+	canceled.  Most likely this is because the client requested a
+	second mode switch before the first one completed.
+
+	Upon recieving this event, the client should destroy the
+	wl_fullscreen_shell_mode_feedback object.
+      </description>
+    </event>
   </interface>
 </protocol>

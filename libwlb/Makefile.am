@@ -14,6 +14,7 @@ libwlb_la_SOURCES =			\
 	pointer.c			\
 	keyboard.c			\
 	touch.c				\
+	fullscreen-shell.c		\
 	pixman-renderer.c		\
 	compositor.c
 

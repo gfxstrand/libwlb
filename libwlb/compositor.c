@@ -206,6 +206,9 @@ wlb_compositor_create(struct wl_display *display)
 			      comp, compositor_bind))
 		goto err_alloc;
 
+	comp->fshell = wlb_fullscreen_shell_create(comp);
+	if (!comp->fshell)
+		goto err_alloc;
 	
 	wlb_compositor_add_buffer_type(comp, &shm_buffer_type, NULL);
 

@@ -29,6 +29,8 @@
 
 #include <pixman.h>
 
+struct wlb_fullscreen_shell;
+
 struct wlb_compositor {
 	struct wl_display *display;
 
@@ -36,7 +38,14 @@ struct wlb_compositor {
 
 	struct wl_list output_list;
 	struct wl_list seat_list;
+
+	struct wlb_fullscreen_shell *fshell;
 };
+
+struct wlb_fullscreen_shell *
+wlb_fullscreen_shell_create(struct wlb_compositor *compositor);
+void
+wlb_fullscreen_shell_destroy(struct wlb_fullscreen_shell *fshell);
 
 struct wlb_region {
 	struct wl_resource *resource;
