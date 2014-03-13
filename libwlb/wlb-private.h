@@ -108,6 +108,7 @@ struct wlb_output {
 	struct wl_list mode_list;
 	struct wlb_output_mode *current_mode;
 	struct wlb_output_mode *preferred_mode;
+	struct wl_signal mode_changed_signal;
 
 	int32_t x, y;
 

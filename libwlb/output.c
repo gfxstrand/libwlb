@@ -119,6 +119,7 @@ wlb_output_create(struct wlb_compositor *compositor, int32_t width,
 	wl_list_insert(&compositor->output_list, &output->compositor_link);
 
 	wl_list_init(&output->mode_list);
+	wl_signal_init(&output->mode_changed_signal);
 
 	pixman_region32_init(&output->damage);
 	wl_list_init(&output->pending_frame_callbacks);
@@ -246,6 +247,8 @@ wlb_output_set_mode(struct wlb_output *output,
 	pixman_region32_init_rect(&output->damage, 0, 0,
 				  mode->width, mode->height);
 	wlb_output_recompute_surface_position(output);
+
+	wl_signal_emit(&output->mode_changed_signal, output);
 
 	wl_resource_for_each(resource, &output->resource_list)
 		output_send_mode(output, resource, mode);
