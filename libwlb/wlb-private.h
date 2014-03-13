@@ -115,9 +115,6 @@ struct wlb_output {
 	struct {
 		struct wlb_surface *surface;
 		struct wl_list link;
-		enum wl_fullscreen_shell_present_method present_method;
-		uint32_t present_refresh;
-
 		struct wl_listener committed;
 
 		struct wlb_rectangle position;
@@ -128,12 +125,8 @@ struct wlb_output {
 };
 
 void
-wlb_output_present_surface(struct wlb_output *output,
-			   struct wlb_surface *surface,
-			   enum wl_fullscreen_shell_present_method method,
-			   int32_t framerate);
-void
-wlb_output_recompute_surface_position(struct wlb_output *output);
+wlb_output_set_surface(struct wlb_output *output, struct wlb_surface *surface,
+		       const struct wlb_rectangle *pos);
 void
 wlb_output_get_matrix(struct wlb_output *output,
 		      pixman_transform_t *transform);

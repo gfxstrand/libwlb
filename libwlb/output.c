@@ -152,10 +152,7 @@ wlb_output_destroy(struct wlb_output *output)
 		free(mode);
 	}
 
-	if (output->surface.surface) {
-		wl_list_remove(&output->surface.link);
-		wl_list_remove(&output->surface.committed.link);
-	}
+	wlb_output_set_surface(output, NULL, NULL);
 
 	wl_global_destroy(output->global);
 	wl_resource_for_each_safe(resource, next_res, &output->resource_list)
@@ -246,7 +243,6 @@ wlb_output_set_mode(struct wlb_output *output,
 	pixman_region32_fini(&output->damage);
 	pixman_region32_init_rect(&output->damage, 0, 0,
 				  mode->width, mode->height);
-	wlb_output_recompute_surface_position(output);
 
 	wl_signal_emit(&output->mode_changed_signal, output);
 
@@ -326,12 +322,6 @@ wlb_output_surface_position(struct wlb_output *output, int32_t *x, int32_t *y,
 		*height = output->surface.position.height;
 }
 
-WL_EXPORT uint32_t
-wlb_output_present_method(struct wlb_output *output)
-{
-	return output->surface.present_method;
-}
-
 static void
 output_surface_committed(struct wl_listener *listener, void *data)
 {
@@ -370,131 +360,55 @@ output_surface_committed(struct wl_listener *listener, void *data)
 }
 
 void
-wlb_output_present_surface(struct wlb_output *output,
-			   struct wlb_surface *surface,
-			   enum wl_fullscreen_shell_present_method method,
-			   int32_t framerate)
+wlb_output_set_surface(struct wlb_output *output, struct wlb_surface *surface,
+		       const struct wlb_rectangle *pos)
 {
-	if (output->surface.surface) {
+	int pos_changed;
+
+	if (output->surface.surface && output->surface.surface != surface) {
 		wl_list_remove(&output->surface.link);
 		wl_list_remove(&output->surface.committed.link);
 		wlb_surface_compute_primary_output(output->surface.surface);
 	}
 
-	output->surface.surface = surface;
-	output->surface.present_method = method;
-	output->surface.present_refresh = framerate;
-
-	/* Damage where the surface was */
-	pixman_region32_union_rect(&output->damage, &output->damage,
-				   output->surface.position.x,
-				   output->surface.position.y,
-				   output->surface.position.width,
-				   output->surface.position.height);
-	if (surface) {
-		wlb_output_recompute_surface_position(output);
-		wl_list_insert(&surface->output_list, &output->surface.link);
-		output->surface.committed.notify = output_surface_committed;
-		wl_signal_add(&surface->commit_signal,
-			      &output->surface.committed);
-	}
-	/* Damage where the surface is now */
-	pixman_region32_union_rect(&output->damage, &output->damage,
-				   output->surface.position.x,
-				   output->surface.position.y,
-				   output->surface.position.width,
-				   output->surface.position.height);
-}
-
-static void
-wlb_output_default_surface_position(struct wlb_output *output,
-				    struct wlb_rectangle *position)
-{
-	int32_t ow, oh, sw, sh;
-
-	sw = output->surface.surface->width;
-	sh = output->surface.surface->height;
-
-	ow = output->current_mode->width;
-	oh = output->current_mode->height;
-
-	switch(output->surface.present_method) {
-	case WL_FULLSCREEN_SHELL_PRESENT_METHOD_SCALE:
-		if (ow / sw <= oh / sh) {
-			position->width = ow;
-			position->height = (sh * (int64_t)ow) / sw;
-			position->x = 0;
-			position->y = (oh - position->height) / 2;
-		} else {
-			position->width = (sw * (int64_t)oh) / sh;
-			position->height = oh;
-			position->x = (ow - position->width) / 2;
-			position->y = 0;
-		}
-
-		break;
-	default:
-	case WL_FULLSCREEN_SHELL_PRESENT_METHOD_DRIVER:
-		if (WLB_HAS_FUNC(output, switch_mode) &&
-		    WLB_CALL_FUNC(output, switch_mode, sw, sh,
-				  output->surface.present_refresh)) {
-			position->x = 0;
-			position->y = 0;
-			position->width = sw;
-			position->height = sh;
-			break;
-		}
-	case WL_FULLSCREEN_SHELL_PRESENT_METHOD_FILL:
-		position->x = (ow - sw) / 2;
-		position->y = (oh - sh) / 2;
-		position->width = sw;
-		position->height = sh;
-		break;
-	}
-}
-
-void
-wlb_output_recompute_surface_position(struct wlb_output *output)
-{
-	struct wlb_rectangle pos;
-	int ret;
-	assert(output->current_mode);
-
-	if (!output->surface.surface) {
-		pos.x = 0;
-		pos.y = 0;
-		pos.width = 0;
-		pos.height = 0;
-		goto done;
+	if (pos) {
+		pos_changed = output->surface.position.x != pos->x ||
+			      output->surface.position.y != pos->y ||
+			      output->surface.position.width != pos->width ||
+			      output->surface.position.height != pos->height;
+	} else {
+		pos_changed = 0;
 	}
 
-	if (WLB_HAS_FUNC(output, place_surface)) {
-		ret = WLB_CALL_FUNC(output, place_surface,
-				    output->surface.surface,
-				    output->surface.present_method, &pos);
-		if (ret > 0)
-			goto done;
-	}
-
-	wlb_output_default_surface_position(output, &pos);
-
-done:
-	if (pos.x != output->surface.position.x ||
-	    pos.y != output->surface.position.y ||
-	    pos.width != output->surface.position.width ||
-	    pos.height != output->surface.position.height) {
+	if (output->surface.surface &&
+	    (output->surface.surface != surface || pos_changed))
+		/* Damage where the surface was */
 		pixman_region32_union_rect(&output->damage, &output->damage,
 					   output->surface.position.x,
 					   output->surface.position.y,
 					   output->surface.position.width,
 					   output->surface.position.height);
-		output->surface.position = pos;
+
+	if (pos_changed)
+		output->surface.position = *pos;
+
+	if (surface && (output->surface.surface != surface || pos_changed))
+		/* Damage where the surface is now */
 		pixman_region32_union_rect(&output->damage, &output->damage,
-					   pos.x, pos.y, pos.width, pos.height);
+					   output->surface.position.x,
+					   output->surface.position.y,
+					   output->surface.position.width,
+					   output->surface.position.height);
+
+	if (surface && output->surface.surface != surface) {
+		wl_list_insert(&surface->output_list, &output->surface.link);
+		output->surface.committed.notify = output_surface_committed;
+		wl_signal_add(&surface->commit_signal,
+			      &output->surface.committed);
+		wlb_surface_compute_primary_output(surface);
 	}
 
-	if (output->surface.surface)
-		wlb_surface_compute_primary_output(output->surface.surface);
+	output->surface.surface = surface;
 }
 
 void
