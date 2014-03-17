@@ -83,6 +83,9 @@ wlb_matrix_scale(struct wlb_matrix *dest,
 void
 wlb_matrix_ortho(struct wlb_matrix *dest, float l, float r, float t, float b);
 
+void
+wlb_matrix_log(enum wlb_log_level level, const struct wlb_matrix *matrix);
+
 struct wlb_output_mode {
 	struct wl_list link;
 

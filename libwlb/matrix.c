@@ -109,3 +109,14 @@ wlb_matrix_ortho(struct wlb_matrix *dest, float l, float r, float t, float b)
 	memcpy(dest, &tmat, sizeof tmat);
 }
 
+void
+wlb_matrix_log(enum wlb_log_level level, const struct wlb_matrix *matrix)
+{
+	wlb_log(level, "[ %4.4f %4.4f %4.4f ]\n"
+		       "[ %4.4f %4.4f %4.4f ]\n"
+		       "[ %4.4f %4.4f %4.4f ]\n",
+		matrix->d[0], matrix->d[3], matrix->d[6],
+		matrix->d[1], matrix->d[4], matrix->d[7],
+		matrix->d[2], matrix->d[5], matrix->d[8]);
+}
+
