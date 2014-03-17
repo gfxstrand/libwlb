@@ -29,6 +29,9 @@
 
 #include <pixman.h>
 
+#define WLB_MAX(a, b) (((a) < (b)) ? (b) : (a))
+#define WLB_MIN(a, b) (((a) < (b)) ? (a) : (b))
+
 struct wlb_fullscreen_shell;
 
 struct wlb_compositor {
@@ -113,6 +116,8 @@ struct wlb_output {
 		enum wl_output_subpixel subpixel;
 		enum wl_output_transform transform;
 	} physical;
+
+	int32_t scale;
 
 	struct wl_list mode_list;
 	struct wlb_output_mode *current_mode;

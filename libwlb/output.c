@@ -55,6 +55,11 @@ output_send_geometry(struct wlb_output *output, struct wl_resource *resource)
 				output->physical.subpixel,
 				output->physical.make, output->physical.model,
 				output->physical.transform);
+
+	if (wl_resource_get_version(resource) >= 2) {
+		wl_output_send_scale(resource, output->scale);
+		wl_output_send_done(resource);
+	}
 }
 
 static void
@@ -65,7 +70,8 @@ output_bind(struct wl_client *client,
 	struct wlb_output_mode *mode;
 	struct wl_resource *resource;
 
-	resource = wl_resource_create(client, &wl_output_interface, 1, id);
+	resource = wl_resource_create(client, &wl_output_interface,
+				      WLB_MIN(2, version), id);
 	if (!resource) {
 		wl_client_post_no_memory(client);
 		return;
@@ -110,7 +116,7 @@ wlb_output_create(struct wlb_compositor *compositor, int32_t width,
 
 	wl_list_init(&output->resource_list);
 	output->global = wl_global_create(compositor->display,
-					  &wl_output_interface, 1,
+					  &wl_output_interface, 2,
 					  output, output_bind);
 	if (!output->global)
 		goto err_output;
@@ -177,7 +183,39 @@ wlb_output_set_transform(struct wlb_output *output,
 {
 	struct wl_resource *resource;
 
+	switch (transform) {
+	case WL_OUTPUT_TRANSFORM_NORMAL:
+	case WL_OUTPUT_TRANSFORM_90:
+	case WL_OUTPUT_TRANSFORM_180:
+	case WL_OUTPUT_TRANSFORM_270:
+	case WL_OUTPUT_TRANSFORM_FLIPPED:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_90:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_180:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_270:
+		break;
+	default:
+		wlb_error("wlb_outpu_set_transform: Invalid transform: %d\n",
+			  transform);
+		return;
+	}
+
 	output->physical.transform = transform;
+
+	wl_resource_for_each(resource, &output->resource_list)
+		output_send_geometry(output, resource);
+}
+
+WL_EXPORT void
+wlb_output_set_scale(struct wlb_output *output, int32_t scale)
+{
+	struct wl_resource *resource;
+
+	if (scale <= 0) {
+		wlb_error("wlb_outpu_set_scale: Invalid scale: %d\n", scale);
+		return;
+	}
+
+	output->scale = scale;
 
 	wl_resource_for_each(resource, &output->resource_list)
 		output_send_geometry(output, resource);

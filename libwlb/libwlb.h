@@ -161,6 +161,8 @@ WL_EXPORT void
 wlb_output_set_transform(struct wlb_output *output,
 			 enum wl_output_transform transform);
 WL_EXPORT void
+wlb_output_set_scale(struct wlb_output *output, int32_t scale);
+WL_EXPORT void
 wlb_output_set_subpixel(struct wlb_output *output,
 			enum wl_output_subpixel subpixel);
 WL_EXPORT void
