@@ -180,6 +180,9 @@ struct wlb_surface {
 		pixman_region32_t damage;
 		pixman_region32_t input_region;
 
+		enum wl_output_transform transform;
+		int32_t scale;
+
 		struct wl_list frame_callbacks;
 	} pending;
 
@@ -190,12 +193,15 @@ struct wlb_surface {
 	pixman_region32_t damage;
 	pixman_region32_t input_region;
 
+	enum wl_output_transform transform;
+	int32_t scale;
+
 	struct wl_list frame_callbacks;
 };
 
 struct wlb_surface *
 wlb_surface_create(struct wlb_compositor *compositor,
-		   struct wl_client *client, uint32_t id);
+		   struct wl_client *client, int version, uint32_t id);
 void
 wlb_surface_destroy(struct wlb_surface *surface);
 void

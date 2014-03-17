@@ -168,6 +168,9 @@ surface_commit(struct wl_client *client, struct wl_resource *resource)
 
 	surface->buffer = surface->pending.buffer;
 
+	surface->transform = surface->pending.transform;
+	surface->scale = surface->pending.scale;
+
 	if (!surface->buffer) {
 		bwidth = 0;
 		bheight = 0;
@@ -186,8 +189,19 @@ surface_commit(struct wl_client *client, struct wl_resource *resource)
 		}
 	}
 
-	surface->width = bwidth;
-	surface->height = bheight;
+	switch(surface->transform) {
+	case WL_OUTPUT_TRANSFORM_90:
+	case WL_OUTPUT_TRANSFORM_270:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_90:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_270:
+		surface->width = bheight / surface->scale;
+		surface->height = bwidth / surface->scale;
+		break;
+	default:
+		surface->width = bwidth / surface->scale;
+		surface->height = bheight / surface->scale;
+		break;
+	}
 
 	if (surface->buffer)
 		wl_resource_add_destroy_listener(surface->buffer,
@@ -195,6 +209,8 @@ surface_commit(struct wl_client *client, struct wl_resource *resource)
 	
 	pixman_region32_union(&surface->damage, &surface->damage, 
 			      &surface->pending.damage);
+	pixman_region32_intersect_rect(&surface->damage, &surface->damage,
+				       0, 0, surface->width, surface->height);
 	pixman_region32_fini(&surface->pending.damage);
 	pixman_region32_init(&surface->pending.damage);
 	pixman_region32_copy(&surface->input_region,
@@ -206,6 +222,37 @@ surface_commit(struct wl_client *client, struct wl_resource *resource)
 	wl_signal_emit(&surface->commit_signal, surface);
 }
 
+static void
+surface_set_buffer_transform(struct wl_client *client,
+			     struct wl_resource *resource,
+			     int32_t transform)
+{
+	struct wlb_surface *surface = wl_resource_get_user_data(resource);
+
+	switch (transform) {
+	case WL_OUTPUT_TRANSFORM_NORMAL:
+	case WL_OUTPUT_TRANSFORM_90:
+	case WL_OUTPUT_TRANSFORM_180:
+	case WL_OUTPUT_TRANSFORM_270:
+	case WL_OUTPUT_TRANSFORM_FLIPPED:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_90:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_180:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_270:
+		surface->pending.transform = transform;
+	}
+}
+
+static void
+surface_set_buffer_scale(struct wl_client *client,
+			 struct wl_resource *resource,
+			 int32_t scale)
+{
+	struct wlb_surface *surface = wl_resource_get_user_data(resource);
+
+	if (scale >= 1)
+		surface->pending.scale = scale;
+}
+
 static const struct wl_surface_interface surface_interface = {
 	surface_destroy,
 	surface_attach,
@@ -214,6 +261,8 @@ static const struct wl_surface_interface surface_interface = {
 	surface_set_opaque_region,
 	surface_set_input_region,
 	surface_commit,
+	surface_set_buffer_transform,
+	surface_set_buffer_scale,
 };
 
 static void
@@ -257,7 +306,7 @@ wlb_surface_destroy(struct wlb_surface *surface)
 
 struct wlb_surface *
 wlb_surface_create(struct wlb_compositor *compositor,
-		   struct wl_client *client, uint32_t id)
+		   struct wl_client *client, int version, uint32_t id)
 {
 	struct wlb_surface *surface;
 
@@ -269,7 +318,7 @@ wlb_surface_create(struct wlb_compositor *compositor,
 	wl_signal_init(&surface->destroy_signal);
 
 	surface->resource =
-		wl_resource_create(client, &wl_surface_interface, 1, id);
+		wl_resource_create(client, &wl_surface_interface, version, id);
 	if (!surface->resource) {
 		wl_client_post_no_memory(client);
 		return NULL;
@@ -285,6 +334,8 @@ wlb_surface_create(struct wlb_compositor *compositor,
 				  INT32_MIN, INT32_MIN,
 				  UINT32_MAX, UINT32_MAX);
 	wl_list_init(&surface->pending.frame_callbacks);
+	surface->pending.transform = WL_OUTPUT_TRANSFORM_NORMAL;
+	surface->pending.scale = 1;
 
 	surface->buffer_destroy_listener.notify = surface_buffer_destroyed;
 	pixman_region32_init(&surface->damage);
@@ -292,6 +343,8 @@ wlb_surface_create(struct wlb_compositor *compositor,
 				  INT32_MIN, INT32_MIN,
 				  UINT32_MAX, UINT32_MAX);
 	wl_list_init(&surface->frame_callbacks);
+	surface->transform = WL_OUTPUT_TRANSFORM_NORMAL;
+	surface->scale = 1;
 
 	wl_resource_set_implementation(surface->resource, &surface_interface,
 				       surface, surface_resource_destroyed);
@@ -352,11 +405,67 @@ wlb_surface_get_buffer_damage(struct wlb_surface *surface, int *nrects)
 	if (!rects)
 		return NULL;
 
-	memcpy(rects, drects, dnrects * sizeof(*rects));
-
 	for (i = 0; i < dnrects; ++i) {
-		rects[i].width -= rects[i].x;
-		rects[i].height -= rects[i].y;
+		switch (surface->transform) {
+		case WL_OUTPUT_TRANSFORM_NORMAL:
+			rects[i].x = drects[i].x1;
+			rects[i].y = drects[i].y1;
+			break;
+		case WL_OUTPUT_TRANSFORM_90:
+			rects[i].x = surface->height - drects[i].y2;
+			rects[i].y = drects[i].x1;
+			break;
+		case WL_OUTPUT_TRANSFORM_180:
+			rects[i].x = surface->width - drects[i].x2;
+			rects[i].y = surface->height - drects[i].y2;
+			break;
+		case WL_OUTPUT_TRANSFORM_270:
+			rects[i].x = drects[i].y1;
+			rects[i].y = surface->width - drects[i].x2;
+			break;
+		case WL_OUTPUT_TRANSFORM_FLIPPED:
+			rects[i].x = surface->width - drects[i].x2;
+			rects[i].y = drects[i].y1;
+			break;
+		case WL_OUTPUT_TRANSFORM_FLIPPED_90:
+			rects[i].x = surface->height - drects[i].y2;
+			rects[i].y = surface->width - drects[i].x2;
+			break;
+		case WL_OUTPUT_TRANSFORM_FLIPPED_180:
+			rects[i].x = drects[i].x1;
+			rects[i].y = surface->height - drects[i].y2;
+			break;
+		case WL_OUTPUT_TRANSFORM_FLIPPED_270:
+			rects[i].x = drects[i].y1;
+			rects[i].y = drects[i].x1;
+			break;
+		}
+
+		switch (surface->transform) {
+		case WL_OUTPUT_TRANSFORM_NORMAL:
+		case WL_OUTPUT_TRANSFORM_180:
+		case WL_OUTPUT_TRANSFORM_FLIPPED:
+		case WL_OUTPUT_TRANSFORM_FLIPPED_180:
+			rects[i].width = drects[i].x2 - drects[i].x1;
+			rects[i].height = drects[i].y2 - drects[i].y1;
+			break;
+		case WL_OUTPUT_TRANSFORM_90:
+		case WL_OUTPUT_TRANSFORM_270:
+		case WL_OUTPUT_TRANSFORM_FLIPPED_90:
+		case WL_OUTPUT_TRANSFORM_FLIPPED_270:
+			rects[i].width = drects[i].y2 - drects[i].y1;
+			rects[i].height = drects[i].x2 - drects[i].x1;
+			break;
+		}
+	}
+
+	if (surface->scale != 1) {
+		for (i = 0; i < dnrects; i++) {
+			rects[i].x *= surface->scale;
+			rects[i].y *= surface->scale;
+			rects[i].width *= surface->scale;
+			rects[i].height *= surface->scale;
+		}
 	}
 
 	return rects;
@@ -378,12 +487,12 @@ wlb_surface_buffer(struct wlb_surface *surface)
 WL_EXPORT enum wl_output_transform
 wlb_surface_buffer_transform(struct wlb_surface *surface)
 {
-	return WL_OUTPUT_TRANSFORM_NORMAL;
+	return surface->transform;
 }
 
 WL_EXPORT int32_t
 wlb_surface_buffer_scale(struct wlb_surface *surface)
 {
-	return 1;
+	return surface->scale;
 }
 

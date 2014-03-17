@@ -44,7 +44,8 @@ compositor_create_surface(struct wl_client *client,
 	struct wlb_compositor *compositor = wl_resource_get_user_data(resource);
 	struct wlb_surface *surface;
 
-	surface = wlb_surface_create(compositor, client, id);
+	surface = wlb_surface_create(compositor, client,
+				     wl_resource_get_version(resource), id);
 	if (!surface)
 		wl_client_post_no_memory(client);
 }
@@ -129,7 +130,8 @@ compositor_bind(struct wl_client *client,
 	struct wlb_compositor *comp = data;
 	struct wl_resource *resource;
 
-	resource = wl_resource_create(client, &wl_compositor_interface, 1, id);
+	resource = wl_resource_create(client, &wl_compositor_interface,
+				      WLB_MIN(version, 3), id);
 	if (!resource) {
 		wl_client_post_no_memory(client);
 		return;
@@ -202,7 +204,7 @@ wlb_compositor_create(struct wl_display *display)
 	wl_list_init(&comp->output_list);
 	wl_list_init(&comp->seat_list);
 	
-	if (!wl_global_create(display, &wl_compositor_interface, 1,
+	if (!wl_global_create(display, &wl_compositor_interface, 3,
 			      comp, compositor_bind))
 		goto err_alloc;
 
