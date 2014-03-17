@@ -79,15 +79,10 @@ wlb_matrix_translate(struct wlb_matrix *dest,
 
 void
 wlb_matrix_rotate(struct wlb_matrix *dest,
-		  const struct wlb_matrix *src, float theta)
+		  const struct wlb_matrix *src, float cos, float sin)
 {
-	float c, s;
-
-	c = cos(theta);
-	s = sin(theta);
-
 	struct wlb_matrix tmat = { .d = {
-		c, s, 0, -s, c, 0, 0, 0, 1
+		cos, sin, 0, -sin, cos, 0, 0, 0, 1
 	} };
 
 	wlb_matrix_mult(dest, src, &tmat);

@@ -76,7 +76,7 @@ wlb_matrix_translate(struct wlb_matrix *dest,
 		     const struct wlb_matrix *src, float dx, float dy);
 void
 wlb_matrix_rotate(struct wlb_matrix *dest,
-		  const struct wlb_matrix *src, float theta);
+		  const struct wlb_matrix *src, float cos, float sin);
 void
 wlb_matrix_scale(struct wlb_matrix *dest,
 		 const struct wlb_matrix *src, float sx, float sy);
