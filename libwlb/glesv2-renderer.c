@@ -64,8 +64,8 @@ struct gles2_surface {
 	struct wlb_surface *surface;
 	struct wl_listener destroy_listener;
 
-	int32_t width, height;
-	uint32_t pitch;
+	int32_t bwidth, bheight;
+	uint32_t bpitch;
 
 	struct wl_resource *buffer;
 	const struct wlb_buffer_type *buffer_type;
@@ -442,7 +442,7 @@ gles2_surface_update_shm(struct wlb_gles2_renderer *gr,
 		goto err_damage;
 	}
 
-	gs->pitch = stride / 4;
+	gs->bpitch = stride / 4;
 
 	gs->shader = gles2_shader_get_for_shm_format(gr, format);
 	if (!gs->shader) {
@@ -458,10 +458,10 @@ gles2_surface_update_shm(struct wlb_gles2_renderer *gr,
 	glBindTexture(GL_TEXTURE_2D, gs->textures[0]);
 
 #ifdef GL_EXT_unpack_subimage
-	glPixelStorei(GL_UNPACK_ROW_LENGTH_EXT, gs->pitch);
+	glPixelStorei(GL_UNPACK_ROW_LENGTH_EXT, gs->bpitch);
 
 	if (gr->has_unpack_subimage && full_damage) {
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, gs->width, gs->height,
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, gs->bwidth, gs->bheight,
 			     0, GL_RGBA, GL_UNSIGNED_BYTE, pixel_data);
 		goto done;
 	} else if (gr->has_unpack_subimage) {
@@ -477,7 +477,7 @@ gles2_surface_update_shm(struct wlb_gles2_renderer *gr,
 	}
 #endif
 
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, gs->pitch, gs->height, 0,
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, gs->bpitch, gs->bheight, 0,
 		     GL_RGBA, GL_UNSIGNED_BYTE, pixel_data);
 
 done:
@@ -511,9 +511,9 @@ gles2_surface_ensure_textures(struct gles2_surface *gs, int num_textures)
 		glTexParameteri(GL_TEXTURE_2D,
 				GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_2D,
-				GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+				GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D,
-				GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+				GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	}
 
 	for (i = num_textures; i < WLB_BUFFER_MAX_PLANES; ++i) {
@@ -524,7 +524,7 @@ gles2_surface_ensure_textures(struct gles2_surface *gs, int num_textures)
 static int
 gles2_surface_prepare(struct wlb_gles2_renderer *gr, struct gles2_surface *gs)
 {
-	int32_t width, height;
+	int32_t bwidth, bheight;
 	int full_damage = 0;
 
 	gs->buffer = wlb_surface_buffer(gs->surface);
@@ -537,21 +537,21 @@ gles2_surface_prepare(struct wlb_gles2_renderer *gr, struct gles2_surface *gs)
 	}
 
 	gs->buffer_type->get_size(gs->buffer_type_data, gs->buffer,
-				  &width, &height);
+				  &bwidth, &bheight);
 
-	if (width < 0 || height < 0) {
-		gs->width = 0;
-		gs->height = 0;
+	if (bwidth < 0 || bheight < 0) {
+		gs->bwidth = 0;
+		gs->bheight = 0;
 		wlb_error("Invalid buffer size");
 		return -1;
-	} else if (width != gs->width || height != gs->height) {
-		gs->width = width;
-		gs->height = height;
+	} else if (bwidth != gs->bwidth || bheight != gs->bheight) {
+		gs->bwidth = bwidth;
+		gs->bheight = bheight;
 		full_damage = 1;
 	}
 
 	if (gs->buffer_type->gles2_shader && gs->buffer_type->attach) {
-		gs->pitch = gs->width;
+		gs->bpitch = gs->bwidth;
 		gles2_surface_ensure_textures(gs, gs->buffer_type->num_planes);
 		gs->shader =
 			gles2_shader_get_for_buffer_type(gr, gs->buffer_type,
@@ -770,7 +770,7 @@ WL_EXPORT void
 wlb_gles2_renderer_destroy(struct wlb_gles2_renderer *gr)
 {
 	struct gles2_surface *surface, *sunext;
-	struct gles2_output *output, *onext, *found_output;
+	struct gles2_output *output, *onext;
 	struct gles2_shader *shader, *shnext;
 
 	/* If we have a context, then we don't need to bother cleanin up
@@ -896,8 +896,9 @@ paint_surface(struct wlb_gles2_renderer *gr, struct wlb_output *output)
 	struct wlb_matrix buffer_mat;
 	struct wlb_surface *surface;
 	struct gles2_surface *gs;
+	enum wl_output_transform sbtrans;
 	pixman_region32_t damage;
-	int32_t sx, sy;
+	int32_t sx, sy, sbscale;
 	uint32_t swidth, sheight;
 
 	surface = wlb_output_surface(output);
@@ -911,9 +912,48 @@ paint_surface(struct wlb_gles2_renderer *gr, struct wlb_output *output)
 			   gr->output_mat.d);
 
 	wlb_matrix_init(&buffer_mat);
-	if ((int32_t)gs->pitch != gs->width)
+	if ((int32_t)gs->bpitch != gs->bwidth)
 		wlb_matrix_scale(&buffer_mat, &buffer_mat,
-				 gs->width / (float)gs->pitch, 1);
+				 gs->bwidth / (float)gs->bpitch, 1);
+
+	sbtrans = wlb_surface_buffer_transform(surface);
+	sbscale = wlb_surface_buffer_scale(surface);
+
+	switch (sbtrans) {
+	case WL_OUTPUT_TRANSFORM_NORMAL:
+	case WL_OUTPUT_TRANSFORM_FLIPPED:
+		break;
+	case WL_OUTPUT_TRANSFORM_90:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_90:
+		wlb_matrix_translate(&buffer_mat, &buffer_mat, 1, 0);
+		wlb_matrix_rotate(&buffer_mat, &buffer_mat, 0, 1);
+		break;
+	case WL_OUTPUT_TRANSFORM_180:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_180:
+		wlb_matrix_translate(&buffer_mat, &buffer_mat, 1, 1);
+		wlb_matrix_rotate(&buffer_mat, &buffer_mat, -1, 0);
+		break;
+	case WL_OUTPUT_TRANSFORM_270:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_270:
+		wlb_matrix_translate(&buffer_mat, &buffer_mat, 0, 1);
+		wlb_matrix_rotate(&buffer_mat, &buffer_mat, 0, -1);
+		break;
+	}
+
+	switch (sbtrans) {
+	case WL_OUTPUT_TRANSFORM_NORMAL:
+	case WL_OUTPUT_TRANSFORM_90:
+	case WL_OUTPUT_TRANSFORM_180:
+	case WL_OUTPUT_TRANSFORM_270:
+		break;
+	case WL_OUTPUT_TRANSFORM_FLIPPED:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_90:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_180:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_270:
+		wlb_matrix_translate(&buffer_mat, &buffer_mat, 1, 0);
+		wlb_matrix_scale(&buffer_mat, &buffer_mat, -1, 1);
+		break;
+	}
 
 	wlb_output_surface_position(output, &sx, &sy, &swidth, &sheight);
 	wlb_matrix_scale(&buffer_mat, &buffer_mat,
