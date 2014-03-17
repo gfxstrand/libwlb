@@ -20,13 +20,49 @@
  * OF THIS SOFTWARE.
  */
 
+#include <pixman.h>
+
 #include "wlb-private.h"
 
+#include <stdlib.h>
 #include <stdio.h>
 #include <assert.h>
 
+struct wlb_pixman_renderer {
+	pixman_image_t *black_image;
+};
+
+WL_EXPORT struct wlb_pixman_renderer *
+wlb_pixman_renderer_create(struct wlb_compositor *c)
+{
+	struct wlb_pixman_renderer *pr;
+	pixman_color_t color;
+
+	pr = zalloc(sizeof *pr);
+	if (!pr)
+		return NULL;
+
+	color.red = 0;
+	color.green = 0;
+	color.blue = 0;
+	color.alpha = 0xffff;
+
+	pr->black_image = pixman_image_create_solid_fill(&color);
+
+	return pr;
+}
+
+WL_EXPORT void
+wlb_pixman_renderer_destroy(struct wlb_pixman_renderer *pr)
+{
+	pixman_image_unref(pr->black_image);
+
+	free(pr);
+}
+
 static void
-fill_with_black(pixman_image_t *image, pixman_region32_t *region)
+fill_with_black(struct wlb_pixman_renderer *pr, pixman_image_t *image,
+		pixman_region32_t *region)
 {
 	pixman_color_t color;
 	pixman_image_t *black_image;
@@ -36,22 +72,13 @@ fill_with_black(pixman_image_t *image, pixman_region32_t *region)
 	if (!pixman_region32_not_empty(region))
 		return;
 
-	color.red = 0;
-	color.green = 0;
-	color.blue = 0;
-	color.alpha = 0xffff;
-
-	black_image = pixman_image_create_solid_fill(&color);
-
 	rects = pixman_region32_rectangles(region, &nrects);
 	for (i = 0; i < nrects; ++i)
-		pixman_image_composite32(PIXMAN_OP_SRC, black_image, NULL,
+		pixman_image_composite32(PIXMAN_OP_SRC, pr->black_image, NULL,
 					 image, 0, 0, 0, 0,
 					 rects[i].x1, rects[i].y1,
 					 rects[i].x2 - rects[i].x1,
 					 rects[i].y2 - rects[i].y1);
-
-	pixman_image_unref(black_image);
 }
 
 static void
@@ -113,7 +140,9 @@ paint_shm_buffer(pixman_image_t *image, pixman_region32_t *region,
 }
 
 WL_EXPORT void
-wlb_output_pixman_composite(struct wlb_output *output, pixman_image_t *image)
+wlb_pixman_renderer_repaint_output(struct wlb_pixman_renderer *pr,
+				   struct wlb_output *output,
+				   pixman_image_t *image)
 {
 	int32_t width, height;
 	pixman_region32_t damage, surface_damage;
@@ -149,7 +178,7 @@ wlb_output_pixman_composite(struct wlb_output *output, pixman_image_t *image)
 		pixman_region32_fini(&surface_damage);
 	}
 
-	fill_with_black(image, &damage);
+	fill_with_black(pr, image, &damage);
 
 	pixman_region32_fini(&damage);
 }

@@ -87,6 +87,7 @@ struct x11_compositor {
 	struct wlb_seat *seat;
 	struct wlb_pointer *pointer;
 	struct wlb_keyboard *keyboard;
+	struct wlb_pixman_renderer *pixman_renderer;
 	struct wlb_gles2_renderer *gles2_renderer;
 
 	struct {
@@ -906,6 +907,10 @@ x11_compositor_create(struct wl_display *display)
 	//x11_compositor_get_wm_info(c);
 
 	init_gl_renderer(c);
+	if (!c->gles2_renderer) {
+		printf("Failed to initialize EGL. Falling back to software compositing\n");
+		c->pixman_renderer = wlb_pixman_renderer_create(c->compositor);
+	}
 
 	if (x11_input_create(c) < 0)
 		goto err_xdisplay;
@@ -1074,7 +1079,8 @@ x11_output_repaint_shm(struct x11_output *output)
 	if (!wlb_output_needs_repaint(output->output))
 		return;
 	
-	wlb_output_pixman_composite(output->output, output->hw_surface);
+	wlb_pixman_renderer_repaint_output(output->compositor->pixman_renderer,
+					   output->output, output->hw_surface);
 
 	rect.x = 0;
 	rect.y = 0;

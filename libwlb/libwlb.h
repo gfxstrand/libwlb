@@ -24,7 +24,6 @@
 #define LIBWLB_LIBWLB_H
 
 #include <wayland-server.h>
-#include <pixman.h>
 
 #ifndef GL_TRUE
 typedef uint32_t GLuint;
@@ -187,8 +186,6 @@ wlb_output_surface_position(struct wlb_output *output, int32_t *x, int32_t *y,
 			    uint32_t *width, uint32_t *height);
 WL_EXPORT uint32_t
 wlb_output_present_method(struct wlb_output *output);
-WL_EXPORT void
-wlb_output_pixman_composite(struct wlb_output *output, pixman_image_t *image);
 
 WL_EXPORT void
 wlb_surface_add_destroy_listener(struct wlb_surface *surface,
@@ -274,6 +271,18 @@ WL_EXPORT void
 wlb_touch_up(struct wlb_touch *touch, uint32_t time, int32_t id);
 WL_EXPORT void
 wlb_touch_cancel(struct wlb_touch *touch);
+
+#ifdef PIXMAN_FORMAT
+struct wlb_pixman_renderer;
+WL_EXPORT struct wlb_pixman_renderer *
+wlb_pixman_renderer_create(struct wlb_compositor *c);
+WL_EXPORT void
+wlb_pixman_renderer_destroy(struct wlb_pixman_renderer *renderer);
+WL_EXPORT void
+wlb_pixman_renderer_repaint_output(struct wlb_pixman_renderer *renderer,
+				   struct wlb_output *output,
+				   pixman_image_t *output_image);
+#endif /* pixman */
 
 struct wlb_gles2_renderer;
 WL_EXPORT struct wlb_gles2_renderer *
