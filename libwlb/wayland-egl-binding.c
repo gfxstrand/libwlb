@@ -242,6 +242,9 @@ detach(void *data, struct wl_resource *buffer_res)
 	for (i = 0; i < type->type.num_planes; i++)
 		type->binding->destroy_image(type->binding->egl_display,
 					     buffer->images[i]);
+
+	wl_list_remove(&buffer->link);
+	free(buffer);
 }
 
 static const struct wlb_buffer_type buffer_type_rgba = {
