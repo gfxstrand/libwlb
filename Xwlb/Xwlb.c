@@ -874,7 +874,7 @@ init_gl_renderer(struct x11_compositor *c)
 }
 
 struct x11_compositor *
-x11_compositor_create(struct wl_display *display)
+x11_compositor_create(struct wl_display *display, int use_pixman)
 {
 	struct x11_compositor *c;
 	xcb_screen_iterator_t siter;
@@ -906,11 +906,16 @@ x11_compositor_create(struct wl_display *display)
 	x11_compositor_get_resources(c);
 	//x11_compositor_get_wm_info(c);
 
-	init_gl_renderer(c);
-	if (!c->gles2_renderer) {
-		printf("Failed to initialize EGL. Falling back to software compositing\n");
-		c->pixman_renderer = wlb_pixman_renderer_create(c->compositor);
+	if (!use_pixman) {
+		init_gl_renderer(c);
+
+		if (!c->gles2_renderer)
+			printf("Failed to initialize EGL. "
+			       "Falling back to software compositing\n");
 	}
+
+	if (!c->gles2_renderer)
+		c->pixman_renderer = wlb_pixman_renderer_create(c->compositor);
 
 	if (x11_input_create(c) < 0)
 		goto err_xdisplay;
@@ -974,7 +979,7 @@ get_depth_of_visual(xcb_screen_t *screen,
 
 static int
 x11_output_init_shm(struct x11_compositor *c, struct x11_output *output,
-	int width, int height)
+		    int width, int height)
 {
 	xcb_screen_iterator_t iter;
 	xcb_visualtype_t *visual_type;
@@ -1229,19 +1234,50 @@ err_free:
 	return NULL;
 }
 
+static void
+print_usage(int retval)
+{
+	printf(
+		"usage: Xwlb [options]\n\n"
+		"options:\n"
+		"  -h, --help\t\tPring this help\n"
+		"  --width=WIDTH\t\tWidth of the X window\n"
+		"  --height=HEIGHT\tHeight of the X window\n"
+		"  --scale=SCALE\t\tScale factor of the output\n"
+		"  --use-pixman\t\tUse the pixman (CPU) renderer\n"
+	);
+
+	exit(retval);
+}
+
 int
 main(int argc, char *argv[])
 {
 	struct x11_compositor *c;
 	struct wl_display *display;
+	int i, width = 1023, height = 640, use_pixman = 0;
+
+	for (i = 1; i < argc; ++i) {
+		if (strcmp(argv[i], "--help") == 0 ||
+		    strcmp(argv[i], "-h") == 0)
+			print_usage(0);
+		else if (sscanf(argv[i], "--width=%d", &width) > 0)
+			continue;
+		else if (sscanf(argv[i], "--height=%d", &height) > 0)
+			continue;
+		else if (strcmp(argv[i], "--use-pixman") == 0)
+			use_pixman = 1;
+		else
+			print_usage(255);
+	}
 
 	display = wl_display_create();
 	wl_display_add_socket(display, "wayland-0");
 
-	c = x11_compositor_create(display);
+	c = x11_compositor_create(display, use_pixman);
 	if (!c)
 		return 12;
-	x11_output_create(c, 1024, 720);
+	x11_output_create(c, width, height);
 
 	wl_display_init_shm(c->display);
 
