@@ -127,7 +127,7 @@ struct wlb_output {
 	struct wlb_output_mode *preferred_mode;
 	struct wl_signal mode_changed_signal;
 
-	int32_t x, y;
+	int32_t x, y, width, height;
 
 	struct {
 		struct wlb_surface *surface;
@@ -151,8 +151,12 @@ void
 wlb_output_transform_matrix(struct wlb_output *output, struct wlb_matrix *mat);
 void
 wlb_output_to_surface_coords(struct wlb_output *output,
-			     wl_fixed_t x, wl_fixed_t y,
+			     wl_fixed_t ox, wl_fixed_t oy,
 			     wl_fixed_t *sx, wl_fixed_t *sy);
+void
+wlb_output_from_device_coords(struct wlb_output *output,
+			      wl_fixed_t dx, wl_fixed_t dy,
+			      wl_fixed_t *ox, wl_fixed_t *oy);
 struct wlb_output *
 wlb_output_find(struct wlb_compositor *compositor, wl_fixed_t x, wl_fixed_t y);
 struct wlb_output *

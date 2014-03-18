@@ -196,10 +196,8 @@ wlb_presentation_cofigure(struct wlb_presentation *pres)
 	sw = pres->surface->width;
 	sh = pres->surface->height;
 
-	assert(pres->output->current_mode);
-
-	ow = pres->output->current_mode->width;
-	oh = pres->output->current_mode->height;
+	ow = pres->output->width;
+	oh = pres->output->height;
 
 	switch(pres->method) {
 	case WL_FULLSCREEN_SHELL_PRESENT_METHOD_DEFAULT:
@@ -260,10 +258,8 @@ wlb_presentation_cofigure_for_mode(struct wlb_presentation *pres)
 	sw = pres->surface->width;
 	sh = pres->surface->height;
 
-	assert(pres->output->current_mode);
-
-	ow = pres->output->current_mode->width;
-	oh = pres->output->current_mode->height;
+	ow = pres->output->width;
+	oh = pres->output->height;
 
 	/* Automatically succeed if a mode-switch is not needed */
 	if (sw == ow && sh == oh)

@@ -253,6 +253,10 @@ wlb_pointer_move_on_output(struct wlb_pointer *pointer, uint32_t time,
 			   struct wlb_output *output,
 			   wl_fixed_t x, wl_fixed_t y);
 WL_EXPORT void
+wlb_pointer_move_on_output_device(struct wlb_pointer *pointer, uint32_t time,
+				  struct wlb_output *output,
+				  wl_fixed_t x, wl_fixed_t y);
+WL_EXPORT void
 wlb_pointer_leave_output(struct wlb_pointer *pointer);
 
 WL_EXPORT struct wlb_touch *

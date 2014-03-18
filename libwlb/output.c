@@ -112,6 +112,8 @@ wlb_output_create(struct wlb_compositor *compositor, int32_t width,
 	output->physical.transform = WL_OUTPUT_TRANSFORM_NORMAL;
 	output->physical.subpixel = WL_OUTPUT_SUBPIXEL_UNKNOWN;
 
+	output->scale = 1;
+
 	wl_signal_init(&output->destroy_signal);
 
 	wl_list_init(&output->resource_list);
@@ -217,6 +219,11 @@ wlb_output_set_scale(struct wlb_output *output, int32_t scale)
 
 	output->scale = scale;
 
+	if (output->current_mode) {
+		output->width = output->current_mode->width / output->scale;
+		output->height = output->current_mode->height / output->scale;
+	}
+
 	wl_resource_for_each(resource, &output->resource_list)
 		output_send_geometry(output, resource);
 }
@@ -278,9 +285,11 @@ wlb_output_set_mode(struct wlb_output *output,
 
 	output->current_mode = mode;
 
+	output->width = mode->width / output->scale;
+	output->height = mode->height / output->scale;
+
 	pixman_region32_fini(&output->damage);
-	pixman_region32_init_rect(&output->damage, 0, 0,
-				  mode->width, mode->height);
+	pixman_region32_init_rect(&output->damage, 0, 0, width, height);
 
 	wl_signal_emit(&output->mode_changed_signal, output);
 
@@ -558,21 +567,32 @@ wlb_output_transform_matrix(struct wlb_output *output, struct wlb_matrix *mat)
 
 void
 wlb_output_to_surface_coords(struct wlb_output *output,
-			     wl_fixed_t x, wl_fixed_t y,
+			     wl_fixed_t ox, wl_fixed_t oy,
 			     wl_fixed_t *sx, wl_fixed_t *sy)
 {
 	if (!output->current_mode)
 		return;
 
-	x -= wl_fixed_from_int(output->surface.position.x);
-	y -= wl_fixed_from_int(output->surface.position.y);
+	ox -= wl_fixed_from_int(output->surface.position.x);
+	oy -= wl_fixed_from_int(output->surface.position.y);
 
 	if (sx)
-		*sx = (x * (int64_t)output->surface.surface->width) /
+		*sx = (ox * (int64_t)output->surface.surface->width) /
 		      output->surface.position.width;
 	if (sy)
-		*sy = (y * (int64_t)output->surface.surface->height) /
+		*sy = (oy * (int64_t)output->surface.surface->height) /
 		      output->surface.position.height;
+}
+
+void
+wlb_output_from_device_coords(struct wlb_output *output,
+			      wl_fixed_t dx, wl_fixed_t dy,
+			      wl_fixed_t *ox, wl_fixed_t *oy)
+{
+	if (ox)
+		*ox = dx / output->scale;
+	if (oy)
+		*oy = dy / output->scale;
 }
 
 struct wlb_output *
@@ -585,12 +605,9 @@ wlb_output_find(struct wlb_compositor *c, wl_fixed_t x, wl_fixed_t y)
 	iy = wl_fixed_to_int(y);
 
 	wl_list_for_each(output, &c->output_list, compositor_link) {
-		if (!output->current_mode)
-			continue;
-
 		if (ix >= output->x && iy >= output->y &&
-		    ix < output->x + output->current_mode->width &&
-		    iy < output->y + output->current_mode->height)
+		    ix < output->x + output->width &&
+		    iy < output->y + output->height)
 			continue;
 	}
 
@@ -609,12 +626,12 @@ wlb_output_find_with_surface(struct wlb_compositor *c,
 	iy = wl_fixed_to_int(y);
 
 	wl_list_for_each(output, &c->output_list, compositor_link) {
-		if (!output->surface.surface || !output->current_mode)
+		if (!output->surface.surface)
 			continue;
 
 		if (ix < output->x || iy < output->y ||
-		    ix >= output->x + output->current_mode->width ||
-		    iy >= output->y + output->current_mode->height)
+		    ix >= output->x + output->width ||
+		    iy >= output->y + output->height)
 			continue;
 
 		if (ix < output->surface.position.x ||
