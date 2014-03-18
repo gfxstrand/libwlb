@@ -211,29 +211,29 @@ wlb_presentation_cofigure(struct wlb_presentation *pres)
 
 		break;
 	case WL_FULLSCREEN_SHELL_PRESENT_METHOD_ZOOM:
-		if (ow / sw <= oh / sh) {
+		if (ow * sh <= oh * sw) {
 			pos.width = ow;
 			pos.height = (sh * (int64_t)ow) / sw;
 			pos.x = 0;
-			pos.y = (oh - pos.height) / 2;
+			pos.y = (int32_t)(oh - pos.height) / 2;
 		} else {
 			pos.width = (sw * (int64_t)oh) / sh;
 			pos.height = oh;
-			pos.x = (ow - pos.width) / 2;
+			pos.x = (int32_t)(ow - pos.width) / 2;
 			pos.y = 0;
 		}
 
 		break;
 	case WL_FULLSCREEN_SHELL_PRESENT_METHOD_ZOOM_CROP:
-		if (ow / sw >= oh / sh) {
+		if (ow * sh >= oh * sw) {
 			pos.width = ow;
 			pos.height = (sh * (int64_t)ow) / sw;
 			pos.x = 0;
-			pos.y = (oh - pos.height) / 2;
+			pos.y = (int32_t)(oh - pos.height) / 2;
 		} else {
 			pos.width = (sw * (int64_t)oh) / sh;
 			pos.height = oh;
-			pos.x = (ow - pos.width) / 2;
+			pos.x = (int32_t)(ow - pos.width) / 2;
 			pos.y = 0;
 		}
 
