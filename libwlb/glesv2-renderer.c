@@ -1008,8 +1008,7 @@ wlb_gles2_renderer_repaint_output(struct wlb_gles2_renderer *gr,
 		   output->current_mode->width,
 		   output->current_mode->height);
 
-	wlb_matrix_ortho(&gr->output_mat, 0, output->current_mode->width,
-			 0, output->current_mode->height);
+	wlb_matrix_ortho(&gr->output_mat, 0, output->width, 0, output->height);
 	
 	glClearColor(0, 0, 0, 1);
 	glClear(GL_COLOR_BUFFER_BIT);
