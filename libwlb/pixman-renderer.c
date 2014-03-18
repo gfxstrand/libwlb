@@ -64,8 +64,6 @@ static void
 fill_with_black(struct wlb_pixman_renderer *pr, pixman_image_t *image,
 		pixman_region32_t *region)
 {
-	pixman_color_t color;
-	pixman_image_t *black_image;
 	pixman_box32_t *rects;
 	int i, nrects;
 
@@ -83,15 +81,15 @@ fill_with_black(struct wlb_pixman_renderer *pr, pixman_image_t *image,
 
 static void
 paint_shm_buffer(pixman_image_t *image, pixman_region32_t *region,
-		 struct wl_shm_buffer *buffer, struct wlb_rectangle *pos)
+		 struct wl_shm_buffer *buffer,
+		 enum wl_output_transform buffer_transform,
+		 struct wlb_rectangle *pos)
 {
 	pixman_format_code_t format;
-	int32_t swidth, sheight;
-	pixman_image_t *surface_image;
-	pixman_fixed_t xscale, yscale;
+	pixman_image_t *buffer_image;
 	pixman_transform_t transform;
-	pixman_box32_t *rects;
-	int i, nrects;
+	pixman_fixed_t fw, fh;
+	uint32_t bw, bh, rbw, rbh; /* Buffer size before/after roatation */
 
 	switch(wl_shm_buffer_get_format(buffer)) {
 	case WL_SHM_FORMAT_XRGB8888:
@@ -107,36 +105,104 @@ paint_shm_buffer(pixman_image_t *image, pixman_region32_t *region,
 		printf("Unsupported SHM buffer format\n");
 		return;
 	}
-	
-	swidth = wl_shm_buffer_get_width(buffer);
-	sheight = wl_shm_buffer_get_height(buffer);
 
-	surface_image =
-		pixman_image_create_bits(format, swidth, sheight,
+	bw = wl_shm_buffer_get_width(buffer);
+	bh = wl_shm_buffer_get_height(buffer);
+
+	buffer_image =
+		pixman_image_create_bits(format, bw, bh,
 					 wl_shm_buffer_get_data(buffer),
 					 wl_shm_buffer_get_stride(buffer));
 
-	xscale = swidth * pixman_fixed_1 / pos->width;
-	yscale = sheight * pixman_fixed_1 / pos->height;
-	if (xscale != pixman_fixed_1 || yscale != pixman_fixed_1) {
-		pixman_transform_init_scale(&transform, xscale, yscale);
-		pixman_image_set_transform(surface_image, &transform);
-		pixman_image_set_filter(surface_image,
-					PIXMAN_FILTER_BILINEAR, NULL, 0);
+	fw = pixman_int_to_fixed(bw);
+	fh = pixman_int_to_fixed(bh);
+
+	pixman_transform_init_identity(&transform);
+
+	switch (buffer_transform) {
+	case WL_OUTPUT_TRANSFORM_NORMAL:
+	case WL_OUTPUT_TRANSFORM_180:
+	case WL_OUTPUT_TRANSFORM_FLIPPED:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_180:
+		pixman_transform_scale(&transform, NULL,
+				       fw / pos->width, fh / pos->height);
+
+		if (bw != pos->width || bh != pos->height)
+			pixman_image_set_filter(buffer_image,
+						PIXMAN_FILTER_BILINEAR,
+						NULL, 0);
+		break;
+	case WL_OUTPUT_TRANSFORM_90:
+	case WL_OUTPUT_TRANSFORM_270:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_90:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_270:
+		pixman_transform_scale(&transform, NULL,
+				       fh / pos->width, fw / pos->height);
+
+		if (bh != pos->width || bw != pos->height)
+			pixman_image_set_filter(buffer_image,
+						PIXMAN_FILTER_BILINEAR,
+						NULL, 0);
+		break;
 	}
 
-	rects = pixman_region32_rectangles(region, &nrects);
-	for (i = 0; i < nrects; ++i) {
-		pixman_image_composite32(PIXMAN_OP_SRC,
-					 surface_image, NULL, image,
-					 rects[i].x1 - pos->x, rects[i].y1 - pos->y,
-					 0, 0,
-					 rects[i].x1, rects[i].y1,
-					 rects[i].x2 - rects[i].x1,
-					 rects[i].y2 - rects[i].y1);
+	switch (buffer_transform) {
+	case WL_OUTPUT_TRANSFORM_NORMAL:
+	case WL_OUTPUT_TRANSFORM_FLIPPED:
+		break;
+	case WL_OUTPUT_TRANSFORM_90:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_90:
+		pixman_transform_rotate(&transform, NULL, 0, pixman_fixed_1);
+		pixman_transform_translate(&transform, NULL, fw, 0);
+		break;
+	case WL_OUTPUT_TRANSFORM_180:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_180:
+		pixman_transform_rotate(&transform, NULL, -pixman_fixed_1, 0);
+		pixman_transform_translate(&transform, NULL, fw, fh);
+		break;
+	case WL_OUTPUT_TRANSFORM_270:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_270:
+		pixman_transform_rotate(&transform, NULL, 0, -pixman_fixed_1);
+		pixman_transform_translate(&transform, NULL, 0, fh);
+		break;
 	}
 
-	pixman_image_unref(surface_image);
+	switch (buffer_transform) {
+	case WL_OUTPUT_TRANSFORM_NORMAL:
+	case WL_OUTPUT_TRANSFORM_90:
+	case WL_OUTPUT_TRANSFORM_180:
+	case WL_OUTPUT_TRANSFORM_270:
+		break;
+	case WL_OUTPUT_TRANSFORM_FLIPPED:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_180:
+		pixman_transform_scale(&transform, NULL,
+				       -pixman_fixed_1, pixman_fixed_1);
+		pixman_transform_translate(&transform, NULL, fw, 0);
+		break;
+	case WL_OUTPUT_TRANSFORM_FLIPPED_90:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_270:
+		pixman_transform_scale(&transform, NULL,
+				       pixman_fixed_1, -pixman_fixed_1);
+		pixman_transform_translate(&transform, NULL, 0, fh);
+		break;
+	}
+
+	pixman_image_set_transform(buffer_image, &transform);
+
+	pixman_image_set_clip_region32(image, region);
+
+	pixman_image_composite32(PIXMAN_OP_SRC,
+				 buffer_image, /* src_img */
+				 NULL, /* mask_img */
+				 image, /* dest_img */
+				 0, 0, /* src_x/y */
+				 0, 0, /* mask_x/y */
+				 pos->x, pos->y, /* dest_x/y */
+				 pos->width, pos->height); /* src_w/h */
+
+	pixman_image_set_clip_region32(image, NULL);
+
+	pixman_image_unref(buffer_image);
 }
 
 WL_EXPORT void
@@ -148,7 +214,6 @@ wlb_pixman_renderer_repaint_output(struct wlb_pixman_renderer *pr,
 	pixman_region32_t damage, surface_damage;
 	struct wl_shm_buffer *buffer;
 	pixman_transform_t transform;
-	int32_t sx, sy;
 
 	if (!output->current_mode)
 		return;
@@ -172,6 +237,7 @@ wlb_pixman_renderer_repaint_output(struct wlb_pixman_renderer *pr,
 		assert(buffer);
 
 		paint_shm_buffer(image, &surface_damage, buffer,
+				 wlb_surface_buffer_transform(output->surface.surface),
 				 &output->surface.position);
 
 		pixman_region32_subtract(&damage, &damage, &surface_damage);
