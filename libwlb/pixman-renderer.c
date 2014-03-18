@@ -89,7 +89,7 @@ paint_shm_buffer(pixman_image_t *image, pixman_region32_t *region,
 	pixman_image_t *buffer_image;
 	pixman_transform_t transform;
 	pixman_fixed_t fw, fh;
-	uint32_t bw, bh, rbw, rbh; /* Buffer size before/after roatation */
+	uint32_t bw, bh; /* Buffer size before/after roatation */
 
 	switch(wl_shm_buffer_get_format(buffer)) {
 	case WL_SHM_FORMAT_XRGB8888:
@@ -198,7 +198,7 @@ paint_shm_buffer(pixman_image_t *image, pixman_region32_t *region,
 				 0, 0, /* src_x/y */
 				 0, 0, /* mask_x/y */
 				 pos->x, pos->y, /* dest_x/y */
-				 pos->width, pos->height); /* src_w/h */
+				 pos->width, pos->height); /* dest_w/h */
 
 	pixman_image_set_clip_region32(image, NULL);
 
@@ -214,6 +214,7 @@ wlb_pixman_renderer_repaint_output(struct wlb_pixman_renderer *pr,
 	pixman_region32_t damage, surface_damage;
 	struct wl_shm_buffer *buffer;
 	pixman_transform_t transform;
+	struct wlb_rectangle pos;
 
 	if (!output->current_mode)
 		return;
@@ -227,18 +228,23 @@ wlb_pixman_renderer_repaint_output(struct wlb_pixman_renderer *pr,
 	pixman_image_set_transform(image, &transform);
 
 	if (output->surface.surface && output->surface.surface->buffer) {
+		pos.x = output->surface.position.x * output->scale;
+		pos.y = output->surface.position.y * output->scale;
+		pos.width = output->surface.position.width * output->scale;
+		pos.height = output->surface.position.height * output->scale;
+
 		pixman_region32_init_rect(&surface_damage,
-					  output->surface.position.x,
-					  output->surface.position.y,
-					  output->surface.position.width,
-					  output->surface.position.height);
+					  pos.x,
+					  pos.y,
+					  pos.width,
+					  pos.height);
 
 		buffer = wl_shm_buffer_get(output->surface.surface->buffer);
 		assert(buffer);
 
 		paint_shm_buffer(image, &surface_damage, buffer,
 				 wlb_surface_buffer_transform(output->surface.surface),
-				 &output->surface.position);
+				 &pos);
 
 		pixman_region32_subtract(&damage, &damage, &surface_damage);
 		pixman_region32_fini(&surface_damage);
