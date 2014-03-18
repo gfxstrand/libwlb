@@ -197,11 +197,9 @@ pointer_send_motion(struct wlb_pointer *pointer, uint32_t time)
 
 	if (!pointer->focus)
 		return;
-
-	sx = pointer->x - wl_fixed_from_int(pointer->focus->x) -
-	     wl_fixed_from_int(pointer->focus->surface.position.x);
-	sy = pointer->y - wl_fixed_from_int(pointer->focus->y) -
-	     wl_fixed_from_int(pointer->focus->surface.position.y);
+	
+	wlb_output_to_surface_coords(pointer->focus,
+				     pointer->x, pointer->y, &sx, &sy);
 
 	wl_resource_for_each(resource, &pointer->resource_list)
 		wl_pointer_send_motion(resource, time, sx, sy);
