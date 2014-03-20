@@ -63,6 +63,42 @@ output_send_geometry(struct wlb_output *output, struct wl_resource *resource)
 }
 
 static void
+output_update_geometry(struct wlb_output *output)
+{
+	int width, height;
+
+	if (!output->current_mode)
+		return;
+
+	switch (output->physical.transform) {
+	case WL_OUTPUT_TRANSFORM_NORMAL:
+	case WL_OUTPUT_TRANSFORM_180:
+	case WL_OUTPUT_TRANSFORM_FLIPPED:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_180:
+		width = output->current_mode->width;
+		height = output->current_mode->height;
+		break;
+	case WL_OUTPUT_TRANSFORM_90:
+	case WL_OUTPUT_TRANSFORM_270:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_90:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_270:
+		width = output->current_mode->height;
+		height = output->current_mode->width;
+		break;
+	}
+
+	width /= output->scale;
+	height /= output->scale;
+
+	if (output->width != width || output->height != height) {
+		output->width = width;
+		output->height = height;
+
+		wl_signal_emit(&output->geometry_changed_signal, output);
+	}
+}
+
+static void
 output_bind(struct wl_client *client,
 	    void *data, uint32_t version, uint32_t id)
 {
@@ -127,7 +163,7 @@ wlb_output_create(struct wlb_compositor *compositor, int32_t width,
 	wl_list_insert(&compositor->output_list, &output->compositor_link);
 
 	wl_list_init(&output->mode_list);
-	wl_signal_init(&output->mode_changed_signal);
+	wl_signal_init(&output->geometry_changed_signal);
 
 	pixman_region32_init(&output->damage);
 	wl_list_init(&output->pending_frame_callbacks);
@@ -203,6 +239,8 @@ wlb_output_set_transform(struct wlb_output *output,
 
 	output->physical.transform = transform;
 
+	output_update_geometry(output);
+
 	wl_resource_for_each(resource, &output->resource_list)
 		output_send_geometry(output, resource);
 }
@@ -219,10 +257,7 @@ wlb_output_set_scale(struct wlb_output *output, int32_t scale)
 
 	output->scale = scale;
 
-	if (output->current_mode) {
-		output->width = output->current_mode->width / output->scale;
-		output->height = output->current_mode->height / output->scale;
-	}
+	output_update_geometry(output);
 
 	wl_resource_for_each(resource, &output->resource_list)
 		output_send_geometry(output, resource);
@@ -285,13 +320,10 @@ wlb_output_set_mode(struct wlb_output *output,
 
 	output->current_mode = mode;
 
-	output->width = mode->width / output->scale;
-	output->height = mode->height / output->scale;
+	output_update_geometry(output);
 
 	pixman_region32_fini(&output->damage);
 	pixman_region32_init_rect(&output->damage, 0, 0, width, height);
-
-	wl_signal_emit(&output->mode_changed_signal, output);
 
 	wl_resource_for_each(resource, &output->resource_list)
 		output_send_mode(output, resource, mode);
