@@ -35,6 +35,7 @@ struct wlb_presentation {
 	
 	struct wlb_output *output;
 	struct wl_listener output_destroyed;
+	struct wl_listener output_geometry_changed;
 
 	struct wlb_surface *surface;
 	struct wl_listener surface_destroyed;
@@ -100,6 +101,21 @@ presentation_output_destroyed(struct wl_listener *listener, void *data)
 	wlb_presentation_destroy(pres);
 }
 
+static void
+presentation_output_geometry_changed(struct wl_listener *listener, void *data)
+{
+	struct wlb_presentation *pres;
+
+	pres = wl_container_of(listener, pres, output_geometry_changed);
+
+	assert(pres->flags & PRESENTATION_ACTIVE);
+
+	if (pres->flags & PRESENTATION_FOR_MODE)
+		wlb_presentation_cofigure_for_mode(pres);
+	else
+		wlb_presentation_cofigure(pres);
+}
+
 static struct wlb_presentation *
 wlb_presentation_create(struct wlb_fullscreen_shell *fshell,
 			struct wlb_surface *surface,
@@ -129,6 +145,8 @@ wlb_presentation_create(struct wlb_fullscreen_shell *fshell,
 	pres->output = output;
 	pres->output_destroyed.notify = presentation_output_destroyed;
 	wl_signal_add(&pres->output->destroy_signal, &pres->output_destroyed);
+	/* We'll add this later, but want it safe to remove */
+	wl_list_init(&pres->output_geometry_changed.link);
 
 	wl_list_insert(&fshell->presentation_list, &pres->link);
 
@@ -148,6 +166,7 @@ wlb_presentation_destroy(struct wlb_presentation *pres)
 	}
 
 	wl_list_remove(&pres->output_destroyed.link);
+	wl_list_remove(&pres->output_geometry_changed.link);
 
 	wl_list_remove(&pres->link);
 
@@ -167,6 +186,11 @@ wlb_presentation_promote(struct wlb_presentation *pres)
 			wlb_presentation_destroy(other);
 	
 	pres->flags |= PRESENTATION_ACTIVE;
+
+	pres->output_geometry_changed.notify =
+		presentation_output_geometry_changed;
+	wl_signal_add(&pres->output->geometry_changed_signal,
+		      &pres->output_geometry_changed);
 }
 
 static void
