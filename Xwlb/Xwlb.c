@@ -126,7 +126,8 @@ struct x11_output {
 	struct x11_compositor *compositor;
 	struct wl_list compositor_link;
 	struct wlb_output *output;
-	int32_t width, height, scale;
+
+	int32_t window_width, window_height;
 
 	xcb_window_t window;
 	struct wl_event_source *repaint_timer;
@@ -986,11 +987,8 @@ x11_output_init_shm(struct x11_compositor *c, struct x11_output *output)
 	xcb_void_cookie_t cookie;
 	xcb_generic_error_t *err;
 	const xcb_query_extension_reply_t *ext;
-	int iw, ih, bitsperpixel = 0;
+	int bitsperpixel = 0;
 	pixman_format_code_t pixman_format;
-
-	iw = output->width * output->scale;
-	ih = output->height * output->scale;
 
 	/* Check if SHM is available */
 	ext = xcb_get_extension_data(c->conn, &xcb_shm_id);
@@ -1041,7 +1039,7 @@ x11_output_init_shm(struct x11_compositor *c, struct x11_output *output)
 
 
 	/* Create SHM segment and attach it */
-	output->shm_id = shmget(IPC_PRIVATE, iw * ih * (bitsperpixel / 8),
+	output->shm_id = shmget(IPC_PRIVATE, output->window_width * output->window_height * (bitsperpixel / 8),
 				IPC_CREAT | S_IRWXU);
 	if (output->shm_id == -1) {
 		fprintf(stderr, "x11shm: failed to allocate SHM segment\n");
@@ -1064,9 +1062,11 @@ x11_output_init_shm(struct x11_compositor *c, struct x11_output *output)
 	shmctl(output->shm_id, IPC_RMID, NULL);
 
 	/* Now create pixman image */
-	output->hw_surface = pixman_image_create_bits(pixman_format, iw, ih,
+	output->hw_surface = pixman_image_create_bits(pixman_format,
+						      output->window_width,
+						      output->window_height,
 						      output->buf,
-						      iw * (bitsperpixel / 8));
+						      output->window_width * (bitsperpixel / 8));
 
 	output->gc = xcb_generate_id(c->conn);
 	xcb_create_gc(c->conn, output->gc, output->window, 0, NULL);
@@ -1093,8 +1093,8 @@ x11_output_repaint_shm(struct x11_output *output)
 
 	rect.x = 0;
 	rect.y = 0;
-	rect.width = output->width * output->scale;
-	rect.height = output->height * output->scale;
+	rect.width = output->window_width;
+	rect.height = output->window_height;
 
 	cookie = xcb_set_clip_rectangles_checked(output->compositor->conn,
 						 XCB_CLIP_ORDERING_UNSORTED,
@@ -1145,7 +1145,7 @@ x11_output_repaint(void *data)
 
 struct x11_output *
 x11_output_create(struct x11_compositor *c, int32_t width, int32_t height,
-		  int32_t scale)
+		  int32_t scale, enum wl_output_transform transform)
 {
 	struct x11_output *output;
 	xcb_screen_iterator_t iter;
@@ -1180,16 +1180,30 @@ x11_output_create(struct x11_compositor *c, int32_t width, int32_t height,
 					   "Xwlb", "none");
 	if (!output->output)
 		goto err_free;
-	
-	output->width = width;
-	output->height = height;
-	output->scale = scale;
 
 	width *= scale;
 	height *= scale;
 
 	wlb_output_set_mode(output->output, width, height, 60000);
 	wlb_output_set_scale(output->output, scale);
+	wlb_output_set_transform(output->output, transform);
+
+	switch (transform) {
+	case WL_OUTPUT_TRANSFORM_NORMAL:
+	case WL_OUTPUT_TRANSFORM_180:
+	case WL_OUTPUT_TRANSFORM_FLIPPED:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_180:
+		output->window_width = width * scale;
+		output->window_height = height * scale;
+		break;
+	case WL_OUTPUT_TRANSFORM_90:
+	case WL_OUTPUT_TRANSFORM_270:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_90:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_270:
+		output->window_width = height * scale;
+		output->window_height = width * scale;
+		break;
+	}
 
 	output->window = xcb_generate_id(c->conn);
 	iter = xcb_setup_roots_iterator(xcb_get_setup(c->conn));
@@ -1198,7 +1212,7 @@ x11_output_create(struct x11_compositor *c, int32_t width, int32_t height,
 			  output->window,
 			  iter.data->root,
 			  0, 0,
-			  width, height,
+			  output->window_width, output->window_height,
 			  0,
 			  XCB_WINDOW_CLASS_INPUT_OUTPUT,
 			  iter.data->root_visual,
@@ -1208,10 +1222,10 @@ x11_output_create(struct x11_compositor *c, int32_t width, int32_t height,
 	memset(&normal_hints, 0, sizeof normal_hints);
 	normal_hints.flags =
 		WM_NORMAL_HINTS_MAX_SIZE | WM_NORMAL_HINTS_MIN_SIZE;
-	normal_hints.min_width = width;
-	normal_hints.min_height = height;
-	normal_hints.max_width = width;
-	normal_hints.max_height = height;
+	normal_hints.min_width = output->window_width;
+	normal_hints.min_height = output->window_height;
+	normal_hints.max_width = output->window_width;
+	normal_hints.max_height = output->window_height;
 	xcb_change_property(c->conn, XCB_PROP_MODE_REPLACE, output->window,
 			    c->atom.wm_normal_hints,
 			    c->atom.wm_size_hints, 32,
@@ -1261,27 +1275,61 @@ print_usage(int retval)
 	exit(retval);
 }
 
+static int
+parse_transform(const char *str, enum wl_output_transform *transform)
+{
+	int i;
+	static const struct {
+		const char *name;
+		enum wl_output_transform transform;
+	} names[] = {
+		{ "normal",	WL_OUTPUT_TRANSFORM_NORMAL },
+		{ "90",		WL_OUTPUT_TRANSFORM_90 },
+		{ "180",	WL_OUTPUT_TRANSFORM_180 },
+		{ "270",	WL_OUTPUT_TRANSFORM_270 },
+		{ "flipped",	WL_OUTPUT_TRANSFORM_FLIPPED },
+		{ "flipped-90",	WL_OUTPUT_TRANSFORM_FLIPPED_90 },
+		{ "flipped-180", WL_OUTPUT_TRANSFORM_FLIPPED_180 },
+		{ "flipped-270", WL_OUTPUT_TRANSFORM_FLIPPED_270 },
+	};
+
+	for (i = 0; i < 8; i++) {
+		if (strcmp(names[i].name, str) == 0) {
+			*transform = names[i].transform;
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
 int
 main(int argc, char *argv[])
 {
 	struct x11_compositor *c;
 	struct wl_display *display;
+	enum wl_output_transform transform = WL_OUTPUT_TRANSFORM_NORMAL;
 	int i, width = 1023, height = 640, scale = 1, use_pixman = 0;
 
 	for (i = 1; i < argc; ++i) {
 		if (strcmp(argv[i], "--help") == 0 ||
-		    strcmp(argv[i], "-h") == 0)
+		    strcmp(argv[i], "-h") == 0) {
 			print_usage(0);
-		else if (sscanf(argv[i], "--width=%d", &width) > 0)
+		} else if (sscanf(argv[i], "--width=%d", &width) > 0) {
 			continue;
-		else if (sscanf(argv[i], "--height=%d", &height) > 0)
+		} else if (sscanf(argv[i], "--height=%d", &height) > 0) {
 			continue;
-		else if (sscanf(argv[i], "--scale=%d", &scale) > 0)
+		} else if (sscanf(argv[i], "--scale=%d", &scale) > 0) {
 			continue;
-		else if (strcmp(argv[i], "--use-pixman") == 0)
+		} else if (strncmp(argv[i], "--transform=", 12) == 0 &&
+			   parse_transform(argv[i] + 12, &transform) > 0) {
+			continue;
+		} else if (strcmp(argv[i], "--use-pixman") == 0) {
 			use_pixman = 1;
-		else
+		} else {
+			printf("Invalid option: %s\n", argv[i]);
 			print_usage(255);
+		}
 	}
 
 	display = wl_display_create();
@@ -1290,7 +1338,7 @@ main(int argc, char *argv[])
 	c = x11_compositor_create(display, use_pixman);
 	if (!c)
 		return 12;
-	x11_output_create(c, width, height, scale);
+	x11_output_create(c, width, height, scale, transform);
 
 	wl_display_init_shm(c->display);
 
