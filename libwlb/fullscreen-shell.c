@@ -43,7 +43,7 @@ struct wlb_presentation {
 
 	uint32_t flags;
 	int32_t framerate;
-	enum wl_fullscreen_shell_present_method method;
+	enum _wl_fullscreen_shell_present_method method;
 	struct wl_resource *mode_feedback;
 };
 
@@ -160,7 +160,7 @@ wlb_presentation_destroy(struct wlb_presentation *pres)
 	wl_list_remove(&pres->surface_committed.link);
 
 	if (pres->mode_feedback) {
-		wl_fullscreen_shell_mode_feedback_send_present_canceled(
+		_wl_fullscreen_shell_mode_feedback_send_present_cancelled(
 			pres->mode_feedback);
 		wl_resource_destroy(pres->mode_feedback);
 	}
@@ -224,15 +224,15 @@ wlb_presentation_cofigure(struct wlb_presentation *pres)
 	oh = pres->output->height;
 
 	switch(pres->method) {
-	case WL_FULLSCREEN_SHELL_PRESENT_METHOD_DEFAULT:
-	case WL_FULLSCREEN_SHELL_PRESENT_METHOD_CENTER:
+	case _WL_FULLSCREEN_SHELL_PRESENT_METHOD_DEFAULT:
+	case _WL_FULLSCREEN_SHELL_PRESENT_METHOD_CENTER:
 		pos.x = (ow - sw) / 2;
 		pos.y = (oh - sh) / 2;
 		pos.width = sw;
 		pos.height = sh;
 
 		break;
-	case WL_FULLSCREEN_SHELL_PRESENT_METHOD_ZOOM:
+	case _WL_FULLSCREEN_SHELL_PRESENT_METHOD_ZOOM:
 		if (ow * sh <= oh * sw) {
 			pos.width = ow;
 			pos.height = (sh * (int64_t)ow) / sw;
@@ -246,7 +246,7 @@ wlb_presentation_cofigure(struct wlb_presentation *pres)
 		}
 
 		break;
-	case WL_FULLSCREEN_SHELL_PRESENT_METHOD_ZOOM_CROP:
+	case _WL_FULLSCREEN_SHELL_PRESENT_METHOD_ZOOM_CROP:
 		if (ow * sh >= oh * sw) {
 			pos.width = ow;
 			pos.height = (sh * (int64_t)ow) / sw;
@@ -260,7 +260,7 @@ wlb_presentation_cofigure(struct wlb_presentation *pres)
 		}
 
 		break;
-	case WL_FULLSCREEN_SHELL_PRESENT_METHOD_STRETCH:
+	case _WL_FULLSCREEN_SHELL_PRESENT_METHOD_STRETCH:
 		pos.x = 0;
 		pos.y = 0;
 		pos.width = ow;
@@ -298,14 +298,14 @@ wlb_presentation_cofigure_for_mode(struct wlb_presentation *pres)
 			wlb_presentation_promote(pres);
 
 		if (pres->mode_feedback) {
-			wl_fullscreen_shell_mode_feedback_send_mode_successful(
+			_wl_fullscreen_shell_mode_feedback_send_mode_successful(
 				pres->mode_feedback);
 			wl_resource_destroy(pres->mode_feedback);
 			pres->mode_feedback = NULL;
 		}
 	} else {
 		if (pres->mode_feedback) {
-			wl_fullscreen_shell_mode_feedback_send_mode_failed(
+			_wl_fullscreen_shell_mode_feedback_send_mode_failed(
 				pres->mode_feedback);
 			wl_resource_destroy(pres->mode_feedback);
 			pres->mode_feedback = NULL;
@@ -348,7 +348,7 @@ fullscreen_shell_release(struct wl_client *client,
 static void
 present_surface_helper(struct wlb_fullscreen_shell *fshell,
 		       struct wlb_surface *surface, struct wlb_output *output,
-		       enum wl_fullscreen_shell_present_method method)
+		       enum _wl_fullscreen_shell_present_method method)
 {
 	struct wlb_presentation *pres;
 
@@ -382,15 +382,15 @@ fullscreen_shell_present_surface(struct wl_client *client,
 	surface = surface_res ? wl_resource_get_user_data(surface_res) : NULL;
 
 	switch (method) {
-	case WL_FULLSCREEN_SHELL_PRESENT_METHOD_DEFAULT:
-	case WL_FULLSCREEN_SHELL_PRESENT_METHOD_CENTER:
-	case WL_FULLSCREEN_SHELL_PRESENT_METHOD_ZOOM:
-	case WL_FULLSCREEN_SHELL_PRESENT_METHOD_ZOOM_CROP:
-	case WL_FULLSCREEN_SHELL_PRESENT_METHOD_STRETCH:
+	case _WL_FULLSCREEN_SHELL_PRESENT_METHOD_DEFAULT:
+	case _WL_FULLSCREEN_SHELL_PRESENT_METHOD_CENTER:
+	case _WL_FULLSCREEN_SHELL_PRESENT_METHOD_ZOOM:
+	case _WL_FULLSCREEN_SHELL_PRESENT_METHOD_ZOOM_CROP:
+	case _WL_FULLSCREEN_SHELL_PRESENT_METHOD_STRETCH:
 		break;
 	default:
 		wl_resource_post_error(resource,
-				       WL_FULLSCREEN_SHELL_ERROR_INVALID_METHOD,
+				       _WL_FULLSCREEN_SHELL_ERROR_INVALID_METHOD,
 				       "Invalid present_method argument");
 		return;
 	}
@@ -435,7 +435,7 @@ fullscreen_shell_present_surface_for_mode(struct wl_client *client,
 
 	pres->mode_feedback = 
 		wl_resource_create(client,
-				   &wl_fullscreen_shell_mode_feedback_interface,
+				   &_wl_fullscreen_shell_mode_feedback_interface,
 				   1, feedback_id);
 	if (!pres->mode_feedback) {
 		wlb_error("Out of Memory\n");
@@ -444,7 +444,7 @@ fullscreen_shell_present_surface_for_mode(struct wl_client *client,
 	}
 }
 
-struct wl_fullscreen_shell_interface fullscreen_shell_implementation = {
+struct _wl_fullscreen_shell_interface fullscreen_shell_implementation = {
 	fullscreen_shell_release,
 	fullscreen_shell_present_surface,
 	fullscreen_shell_present_surface_for_mode,
@@ -457,7 +457,7 @@ fullscreen_shell_bind(struct wl_client *client,
 	struct wlb_fullscreen_shell *fshell = data;
 	struct wl_resource *resource;
 
-	resource = wl_resource_create(client, &wl_fullscreen_shell_interface,
+	resource = wl_resource_create(client, &_wl_fullscreen_shell_interface,
 				      1, id);
 	if (!resource) {
 		wl_client_post_no_memory(client);
@@ -481,7 +481,7 @@ wlb_fullscreen_shell_create(struct wlb_compositor *comp)
 	fshell->compositor = comp;
 	wl_list_init(&fshell->presentation_list);
 	fshell->global = wl_global_create(comp->display,
-					  &wl_fullscreen_shell_interface, 1,
+					  &_wl_fullscreen_shell_interface, 1,
 					  fshell, fullscreen_shell_bind);
 	if (!fshell->global)
 		goto err_alloc;
