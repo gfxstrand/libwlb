@@ -562,12 +562,53 @@ wlb_output_to_surface_coords(struct wlb_output *output,
 void
 wlb_output_from_device_coords(struct wlb_output *output,
 			      wl_fixed_t dx, wl_fixed_t dy,
-			      wl_fixed_t *ox, wl_fixed_t *oy)
+			      wl_fixed_t *ox_dest, wl_fixed_t *oy_dest)
 {
-	if (ox)
-		*ox = dx / output->scale;
-	if (oy)
-		*oy = dy / output->scale;
+	wl_fixed_t ox, oy;
+
+	dx /= output->scale;
+	dy /= output->scale;
+
+	switch(output->physical.transform) {
+	default:
+	case WL_OUTPUT_TRANSFORM_NORMAL:
+		ox = dx;
+		oy = dy;
+		break;
+	case WL_OUTPUT_TRANSFORM_90:
+		ox = dy;
+		oy = wl_fixed_from_int(output->height) - dx;
+		break;
+	case WL_OUTPUT_TRANSFORM_180:
+		ox = wl_fixed_from_int(output->width) - dx;
+		oy = wl_fixed_from_int(output->height) - dy;
+		break;
+	case WL_OUTPUT_TRANSFORM_270:
+		ox = wl_fixed_from_int(output->width) - dy;
+		oy = dx;
+		break;
+	case WL_OUTPUT_TRANSFORM_FLIPPED:
+		ox = wl_fixed_from_int(output->width) - dx;
+		oy = dy;
+		break;
+	case WL_OUTPUT_TRANSFORM_FLIPPED_90:
+		ox = wl_fixed_from_int(output->width) - dy;
+		oy = wl_fixed_from_int(output->height) - dx;
+		break;
+	case WL_OUTPUT_TRANSFORM_FLIPPED_180:
+		ox = dx;
+		oy = wl_fixed_from_int(output->height) - dy;
+		break;
+	case WL_OUTPUT_TRANSFORM_FLIPPED_270:
+		ox = dy;
+		oy = dx;
+		break;
+	}
+
+	if (ox_dest)
+		*ox_dest = ox / output->scale;
+	if (oy_dest)
+		*oy_dest = oy / output->scale;
 }
 
 struct wlb_output *
