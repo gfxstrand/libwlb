@@ -1181,29 +1181,14 @@ x11_output_create(struct x11_compositor *c, int32_t width, int32_t height,
 	if (!output->output)
 		goto err_free;
 
-	width *= scale;
-	height *= scale;
+	output->window_width = width * scale;
+	output->window_height = height * scale;
 
-	wlb_output_set_mode(output->output, width, height, 60000);
+	wlb_output_set_mode(output->output,
+			    output->window_width,
+			    output->window_height, 60000);
 	wlb_output_set_scale(output->output, scale);
 	wlb_output_set_transform(output->output, transform);
-
-	switch (transform) {
-	case WL_OUTPUT_TRANSFORM_NORMAL:
-	case WL_OUTPUT_TRANSFORM_180:
-	case WL_OUTPUT_TRANSFORM_FLIPPED:
-	case WL_OUTPUT_TRANSFORM_FLIPPED_180:
-		output->window_width = width * scale;
-		output->window_height = height * scale;
-		break;
-	case WL_OUTPUT_TRANSFORM_90:
-	case WL_OUTPUT_TRANSFORM_270:
-	case WL_OUTPUT_TRANSFORM_FLIPPED_90:
-	case WL_OUTPUT_TRANSFORM_FLIPPED_270:
-		output->window_width = height * scale;
-		output->window_height = width * scale;
-		break;
-	}
 
 	output->window = xcb_generate_id(c->conn);
 	iter = xcb_setup_roots_iterator(xcb_get_setup(c->conn));
