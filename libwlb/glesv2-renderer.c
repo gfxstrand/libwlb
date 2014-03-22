@@ -983,6 +983,7 @@ wlb_gles2_renderer_repaint_output(struct wlb_gles2_renderer *gr,
 {
 	struct gles2_output *go;
 	struct gles2_surface *surface, *snext;
+	struct wlb_matrix ortho_mat;
 
 	assert(output->current_mode);
 
@@ -1008,8 +1009,43 @@ wlb_gles2_renderer_repaint_output(struct wlb_gles2_renderer *gr,
 		   output->current_mode->width,
 		   output->current_mode->height);
 
-	wlb_matrix_ortho(&gr->output_mat, 0, output->width, 0, output->height);
-	
+	wlb_matrix_ortho(&ortho_mat, 0, output->width, 0, output->height);
+
+	wlb_matrix_init(&gr->output_mat);
+	switch (output->physical.transform) {
+	case WL_OUTPUT_TRANSFORM_NORMAL:
+	case WL_OUTPUT_TRANSFORM_FLIPPED:
+		break;
+	case WL_OUTPUT_TRANSFORM_90:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_90:
+		wlb_matrix_rotate(&gr->output_mat, &gr->output_mat, 0, -1);
+		break;
+	case WL_OUTPUT_TRANSFORM_180:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_180:
+		wlb_matrix_rotate(&gr->output_mat, &gr->output_mat, -1, 0);
+		break;
+	case WL_OUTPUT_TRANSFORM_270:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_270:
+		wlb_matrix_rotate(&gr->output_mat, &gr->output_mat, 0, 1);
+		break;
+	}
+
+	switch (output->physical.transform) {
+	case WL_OUTPUT_TRANSFORM_NORMAL:
+	case WL_OUTPUT_TRANSFORM_90:
+	case WL_OUTPUT_TRANSFORM_180:
+	case WL_OUTPUT_TRANSFORM_270:
+		break;
+	case WL_OUTPUT_TRANSFORM_FLIPPED:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_90:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_180:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_270:
+		wlb_matrix_scale(&gr->output_mat, &gr->output_mat, -1, 1);
+		break;
+	}
+
+	wlb_matrix_mult(&gr->output_mat, &gr->output_mat, &ortho_mat);
+
 	glClearColor(0, 0, 0, 1);
 	glClear(GL_COLOR_BUFFER_BIT);
 
