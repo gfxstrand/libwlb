@@ -148,8 +148,6 @@ void
 wlb_output_get_matrix(struct wlb_output *output,
 		      pixman_transform_t *transform);
 void
-wlb_output_transform_matrix(struct wlb_output *output, struct wlb_matrix *mat);
-void
 wlb_output_to_surface_coords(struct wlb_output *output,
 			     wl_fixed_t ox, wl_fixed_t oy,
 			     wl_fixed_t *sx, wl_fixed_t *sy);
